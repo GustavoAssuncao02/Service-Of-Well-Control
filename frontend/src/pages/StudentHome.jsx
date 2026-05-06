@@ -1,5 +1,6 @@
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import SwcLogo from '../components/SwcLogo.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function StudentHome() {
@@ -14,7 +15,7 @@ export default function StudentHome() {
   return (
     <div className="auth-page">
       <section className="auth-panel wide">
-        <img className="auth-logo" src="/swc-logo.svg" alt="SWC" />
+        <SwcLogo className="auth-logo" />
         <div className="section-heading">
           <span>Área do aluno</span>
           <h1>Cadastro realizado</h1>

@@ -145,6 +145,82 @@ function renderBirthdayMessage(template, student) {
     .replaceAll('{telefone}', student.telefone || '');
 }
 
+function normalizeOptionalClassId(value) {
+  if (value === undefined || value === null || value === '') return null;
+
+  const classId = Number(value);
+  if (!Number.isInteger(classId) || classId <= 0) {
+    const error = new Error('Turma selecionada invalida.');
+    error.status = 400;
+    throw error;
+  }
+
+  return classId;
+}
+
+function classFolderName(turma) {
+  const startDate = String(turma.data_inicio || '').slice(0, 10);
+  const endDate = String(turma.data_fim || '').slice(0, 10);
+  const dateRange = startDate && endDate ? ` - ${startDate} a ${endDate}` : '';
+  return `Turma ${turma.id} - ${turma.curso_nome || 'Curso'}${dateRange}`;
+}
+
+async function getStudentClassForDocument(db, studentId, classId) {
+  if (!classId) return null;
+
+  const turma = await db.get(
+    `SELECT t.id, t.data_inicio, t.data_fim, c.nome AS curso_nome, i.nome AS instrutor_nome
+     FROM turma_alunos ta
+     JOIN turmas t ON t.id = ta.turma_id
+     JOIN cursos c ON c.id = t.curso_id
+     JOIN instrutores i ON i.id = t.instrutor_id
+     WHERE ta.aluno_id = ?
+       AND ta.turma_id = ?`,
+    studentId,
+    classId
+  );
+
+  if (!turma) {
+    const error = new Error('A turma selecionada nao esta vinculada a este aluno.');
+    error.status = 400;
+    throw error;
+  }
+
+  return turma;
+}
+
+function studentDocumentsQuery(whereClause) {
+  return `SELECT ad.*,
+                 t.data_inicio AS turma_data_inicio,
+                 t.data_fim AS turma_data_fim,
+                 c.nome AS turma_curso_nome,
+                 i.nome AS turma_instrutor_nome
+          FROM aluno_documentos ad
+          LEFT JOIN turmas t ON t.id = ad.turma_id
+          LEFT JOIN cursos c ON c.id = t.curso_id
+          LEFT JOIN instrutores i ON i.id = t.instrutor_id
+          ${whereClause}`;
+}
+
+function monthName(monthNumber) {
+  const names = [
+    'Janeiro',
+    'Fevereiro',
+    'Marco',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro'
+  ];
+
+  return names[Number(monthNumber) - 1] || '';
+}
+
 function buildStudentReportWhere(query) {
   const where = [];
   const params = [];
@@ -503,6 +579,166 @@ studentRoutes.get(
 );
 
 studentRoutes.get(
+  '/document-browser',
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const selectedYear = req.query.year ? Number(req.query.year) : null;
+    const selectedMonth = req.query.month ? Number(req.query.month) : null;
+    const selectedClassId = req.query.classId ? Number(req.query.classId) : null;
+    const selectedStudentId = req.query.studentId ? Number(req.query.studentId) : null;
+
+    if (selectedYear && (!Number.isInteger(selectedYear) || selectedYear < 2000 || selectedYear > 2100)) {
+      return res.status(400).json({ message: 'Ano invalido.' });
+    }
+
+    if (selectedMonth && (!Number.isInteger(selectedMonth) || selectedMonth < 1 || selectedMonth > 12)) {
+      return res.status(400).json({ message: 'Mes invalido.' });
+    }
+
+    if (selectedClassId && (!Number.isInteger(selectedClassId) || selectedClassId <= 0)) {
+      return res.status(400).json({ message: 'Turma invalida.' });
+    }
+
+    if (selectedStudentId && (!Number.isInteger(selectedStudentId) || selectedStudentId <= 0)) {
+      return res.status(400).json({ message: 'Aluno invalido.' });
+    }
+
+    const years = await db.all(
+      `SELECT YEAR(t.data_inicio) AS ano,
+              COUNT(DISTINCT t.id) AS total_turmas,
+              COUNT(DISTINCT ad.id) AS total_documentos
+       FROM turmas t
+       LEFT JOIN aluno_documentos ad ON ad.turma_id = t.id
+       GROUP BY YEAR(t.data_inicio)
+       ORDER BY ano DESC`
+    );
+
+    const months = selectedYear
+      ? await db.all(
+          `SELECT MONTH(t.data_inicio) AS mes,
+                  COUNT(DISTINCT t.id) AS total_turmas,
+                  COUNT(DISTINCT ad.id) AS total_documentos
+           FROM turmas t
+           LEFT JOIN aluno_documentos ad ON ad.turma_id = t.id
+           WHERE YEAR(t.data_inicio) = ?
+           GROUP BY MONTH(t.data_inicio)
+           ORDER BY mes ASC`,
+          selectedYear
+        )
+      : [];
+
+    const classes =
+      selectedYear && selectedMonth
+        ? await db.all(
+            `SELECT t.id, t.data_inicio, t.data_fim, t.local, t.sala_online, t.status,
+                    c.nome AS curso_nome,
+                    i.nome AS instrutor_nome,
+                    COUNT(DISTINCT ta.aluno_id) AS total_alunos,
+                    COUNT(DISTINCT ad.id) AS total_documentos
+             FROM turmas t
+             JOIN cursos c ON c.id = t.curso_id
+             JOIN instrutores i ON i.id = t.instrutor_id
+             LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
+             LEFT JOIN aluno_documentos ad ON ad.turma_id = t.id
+             WHERE YEAR(t.data_inicio) = ?
+               AND MONTH(t.data_inicio) = ?
+             GROUP BY t.id
+             ORDER BY DATE(t.data_inicio) ASC, c.nome ASC`,
+            selectedYear,
+            selectedMonth
+          )
+        : [];
+
+    let students = [];
+    let documents = [];
+    let selectedClass = null;
+    let selectedStudent = null;
+
+    if (selectedClassId) {
+      selectedClass = await db.get(
+        `SELECT t.id, t.data_inicio, t.data_fim, t.local, t.sala_online, t.status,
+                c.nome AS curso_nome,
+                i.nome AS instrutor_nome
+         FROM turmas t
+         JOIN cursos c ON c.id = t.curso_id
+         JOIN instrutores i ON i.id = t.instrutor_id
+         WHERE t.id = ?`,
+        selectedClassId
+      );
+
+      if (!selectedClass) {
+        return res.status(404).json({ message: 'Turma nao encontrada.' });
+      }
+
+      students = await db.all(
+        `SELECT a.id, a.nome_completo, a.cpf, a.email, a.telefone,
+                ta.status AS status_turma,
+                COUNT(DISTINCT all_docs.id) AS total_documentos,
+                COUNT(DISTINCT class_docs.id) AS total_documentos_turma
+         FROM turma_alunos ta
+         JOIN alunos a ON a.id = ta.aluno_id
+         LEFT JOIN aluno_documentos all_docs ON all_docs.aluno_id = a.id
+         LEFT JOIN aluno_documentos class_docs
+           ON class_docs.aluno_id = a.id
+          AND class_docs.turma_id = ta.turma_id
+         WHERE ta.turma_id = ?
+         GROUP BY a.id, ta.status
+         ORDER BY a.nome_completo ASC`,
+        selectedClassId
+      );
+    }
+
+    if (selectedClassId && selectedStudentId) {
+      selectedStudent = await db.get(
+        `SELECT a.id, a.nome_completo, a.cpf, a.email, a.telefone
+         FROM turma_alunos ta
+         JOIN alunos a ON a.id = ta.aluno_id
+         WHERE ta.turma_id = ?
+           AND ta.aluno_id = ?`,
+        selectedClassId,
+        selectedStudentId
+      );
+
+      if (!selectedStudent) {
+        return res.status(404).json({ message: 'Aluno nao encontrado nesta turma.' });
+      }
+
+      documents = await db.all(
+        `${studentDocumentsQuery('WHERE ad.aluno_id = ? AND ad.turma_id = ?')}
+         ORDER BY ad.criado_em DESC, ad.id DESC`,
+        selectedStudentId,
+        selectedClassId
+      );
+    }
+
+    res.json({
+      selection: {
+        year: selectedYear,
+        month: selectedMonth,
+        classId: selectedClassId,
+        studentId: selectedStudentId
+      },
+      years: years.map((row) => ({
+        year: Number(row.ano),
+        total_turmas: Number(row.total_turmas || 0),
+        total_documentos: Number(row.total_documentos || 0)
+      })),
+      months: months.map((row) => ({
+        month: Number(row.mes),
+        label: monthName(row.mes),
+        total_turmas: Number(row.total_turmas || 0),
+        total_documentos: Number(row.total_documentos || 0)
+      })),
+      classes,
+      students,
+      documents,
+      selectedClass,
+      selectedStudent
+    });
+  })
+);
+
+studentRoutes.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const db = await getDb();
@@ -532,10 +768,8 @@ studentRoutes.get(
     );
 
     const documents = await db.all(
-      `SELECT *
-       FROM aluno_documentos
-       WHERE aluno_id = ?
-       ORDER BY criado_em DESC`,
+      `${studentDocumentsQuery('WHERE ad.aluno_id = ?')}
+       ORDER BY ad.criado_em DESC, ad.id DESC`,
       req.params.id
     );
 
@@ -560,24 +794,28 @@ studentRoutes.post(
       return res.status(400).json({ message: 'Selecione um ou mais arquivos para anexar.' });
     }
 
+    const classId = normalizeOptionalClassId(req.body.turma_id);
+    const selectedClass = await getStudentClassForDocument(db, student.id, classId);
     const uploadedFiles = [];
     const insertedIds = [];
     try {
       for (const file of files) {
         const driveFile = await uploadStudentDocumentToDrive({
           studentName: student.nome_completo,
+          classFolderName: selectedClass ? classFolderName(selectedClass) : '',
           file
         });
         uploadedFiles.push({ file, driveFile });
       }
 
-      await db.run('START TRANSACTION');
+      await db.exec('START TRANSACTION');
 
       for (const item of uploadedFiles) {
         const result = await db.run(
-          `INSERT INTO aluno_documentos (aluno_id, nome_arquivo, tipo_arquivo, tamanho_bytes, drive_file_id, drive_folder_id, drive_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO aluno_documentos (aluno_id, turma_id, nome_arquivo, tipo_arquivo, tamanho_bytes, drive_file_id, drive_folder_id, drive_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           req.params.id,
+          selectedClass?.id || null,
           item.file.originalname,
           item.file.mimetype || 'Arquivo',
           item.file.size,
@@ -588,10 +826,10 @@ studentRoutes.post(
         insertedIds.push(result.lastID);
       }
 
-      await db.run('COMMIT');
+      await db.exec('COMMIT');
     } catch (error) {
       try {
-        await db.run('ROLLBACK');
+        await db.exec('ROLLBACK');
       } catch (rollbackError) {
         console.error(rollbackError);
       }
@@ -606,15 +844,18 @@ studentRoutes.post(
       }
 
       await Promise.allSettled(uploadedFiles.map((item) => deleteDriveFile(item.driveFile.fileId)));
+
+      if (error?.response?.data?.error?.message) {
+        error.message = `Google Drive: ${error.response.data.error.message}`;
+      }
+
       throw error;
     }
 
     const placeholders = insertedIds.map(() => '?').join(', ');
     const documents = await db.all(
-      `SELECT *
-       FROM aluno_documentos
-       WHERE id IN (${placeholders})
-       ORDER BY criado_em DESC, id DESC`,
+      `${studentDocumentsQuery(`WHERE ad.id IN (${placeholders})`)}
+       ORDER BY ad.criado_em DESC, ad.id DESC`,
       insertedIds
     );
     res.status(201).json(documents);

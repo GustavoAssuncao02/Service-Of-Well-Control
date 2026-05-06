@@ -2,6 +2,7 @@ import { ArrowRight, Languages } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, getApiError } from '../api/client.js';
 import { Field } from '../components/Field.jsx';
+import SwcLogo from '../components/SwcLogo.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const languages = [
@@ -344,7 +345,7 @@ export default function Register() {
   return (
     <div className="public-page">
       <header className="public-header">
-        <img src="/swc-logo.svg" alt="SWC" />
+        <SwcLogo />
       </header>
 
       <main className="public-content">

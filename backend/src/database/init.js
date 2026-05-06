@@ -257,10 +257,18 @@ async function ensureBirthdayMessageSupport(db) {
 }
 
 async function ensureStudentDocumentDriveSupport(db) {
+  await ensureColumn(db, 'aluno_documentos', 'turma_id', 'turma_id INT NULL AFTER aluno_id');
   await ensureColumn(db, 'aluno_documentos', 'drive_file_id', 'drive_file_id VARCHAR(191)');
   await ensureColumn(db, 'aluno_documentos', 'drive_folder_id', 'drive_folder_id VARCHAR(191)');
   await ensureColumn(db, 'aluno_documentos', 'drive_url', 'drive_url TEXT');
+  await ensureIndex(db, 'aluno_documentos', 'idx_aluno_documentos_turma_id', 'turma_id');
   await ensureIndex(db, 'aluno_documentos', 'idx_aluno_documentos_drive_file_id', 'drive_file_id');
+  await ensureForeignKey(
+    db,
+    'fk_aluno_documentos_turma',
+    'aluno_documentos',
+    'FOREIGN KEY (turma_id) REFERENCES turmas(id) ON DELETE SET NULL'
+  );
 }
 
 async function ensureStudentNotesSupport(db) {

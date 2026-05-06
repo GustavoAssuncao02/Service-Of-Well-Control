@@ -2,6 +2,7 @@ import { ArrowRight, LockKeyhole, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApiError } from '../api/client.js';
+import SwcLogo from '../components/SwcLogo.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Login() {
@@ -35,7 +36,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <section className="auth-panel">
-        <img className="auth-logo" src="/swc-logo.svg" alt="SWC" />
+        <SwcLogo className="auth-logo" />
         <div className="section-heading">
           <span>Acesso seguro</span>
           <h1>Entrar no sistema</h1>

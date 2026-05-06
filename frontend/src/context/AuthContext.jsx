@@ -27,13 +27,23 @@ export function AuthProvider({ children }) {
     return data;
   }
 
+  async function updateProfile(payload) {
+    const { data } = await api.put('/auth/me', payload);
+    if (data.token) {
+      localStorage.setItem('swc_token', data.token);
+    }
+    localStorage.setItem('swc_user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data;
+  }
+
   function logout() {
     localStorage.removeItem('swc_token');
     localStorage.removeItem('swc_user');
     setUser(null);
   }
 
-  const value = useMemo(() => ({ user, login, register, requestAccess, logout }), [user]);
+  const value = useMemo(() => ({ user, login, register, requestAccess, updateProfile, logout }), [user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

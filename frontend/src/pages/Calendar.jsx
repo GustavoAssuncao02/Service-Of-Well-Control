@@ -11,9 +11,9 @@ const eventPalette = [
   { bg: '#e8f3ff', color: '#1d4f8f', border: '#b9d8fb' },
   { bg: '#fff4db', color: '#8a5a08', border: '#f2d18c' },
   { bg: '#f1edff', color: '#5944a8', border: '#d4c8fb' },
-  { bg: '#e4f8f3', color: '#116b5b', border: '#aee4d9' },
+  { bg: '#f4f6fb', color: '#475569', border: '#d8deea' },
   { bg: '#ffeef3', color: '#9a3f5c', border: '#f5c2d1' },
-  { bg: '#eef6e8', color: '#456f25', border: '#c7e4b5' }
+  { bg: '#fff0e7', color: '#9a4d16', border: '#f8c8a8' }
 ];
 
 function paletteForCourse(turma) {

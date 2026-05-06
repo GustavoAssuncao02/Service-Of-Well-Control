@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS turma_alunos (
 CREATE TABLE IF NOT EXISTS aluno_documentos (
   id INT AUTO_INCREMENT PRIMARY KEY,
   aluno_id INT NOT NULL,
+  turma_id INT,
   nome_arquivo VARCHAR(255) NOT NULL,
   tipo_arquivo VARCHAR(120),
   tamanho_bytes BIGINT,
@@ -165,10 +166,14 @@ CREATE TABLE IF NOT EXISTS aluno_documentos (
   drive_url TEXT,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_aluno_documentos_aluno_id (aluno_id),
+  INDEX idx_aluno_documentos_turma_id (turma_id),
   INDEX idx_aluno_documentos_drive_file_id (drive_file_id),
   CONSTRAINT fk_aluno_documentos_aluno
     FOREIGN KEY (aluno_id) REFERENCES alunos(id)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
+  CONSTRAINT fk_aluno_documentos_turma
+    FOREIGN KEY (turma_id) REFERENCES turmas(id)
+    ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS avaliacoes (

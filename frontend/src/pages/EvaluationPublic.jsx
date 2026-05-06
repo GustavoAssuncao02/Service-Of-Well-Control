@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
+import SwcLogo from '../components/SwcLogo.jsx';
 import { formatDate, todayIso } from '../utils/date.js';
 
 const questions = [
@@ -160,7 +161,7 @@ export default function EvaluationPublic() {
   return (
     <div className="public-page">
       <header className="public-header">
-        <img src="/swc-logo.svg" alt="SWC" />
+        <SwcLogo />
       </header>
 
       <main className="public-content narrow">

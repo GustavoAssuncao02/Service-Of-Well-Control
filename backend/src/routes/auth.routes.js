@@ -346,3 +346,63 @@ authRoutes.get(
     res.json(user);
   })
 );
+
+authRoutes.put(
+  '/me',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const nome = String(req.body.nome || '').trim();
+    const email = String(req.body.email || '').trim();
+
+    if (!nome || !email) {
+      return res.status(400).json({ message: 'Nome e email são obrigatórios.' });
+    }
+
+    const emailOwner = await db.get('SELECT id FROM usuarios WHERE email = ? AND id <> ?', email, req.user.id);
+    if (emailOwner) {
+      return res.status(409).json({ message: 'Este email já está em uso por outro usuário.' });
+    }
+
+    await db.run('UPDATE usuarios SET nome = ?, email = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?', nome, email, req.user.id);
+    const user = await db.get('SELECT id, nome, email, role, criado_em FROM usuarios WHERE id = ?', req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuário não encontrado.' });
+    }
+
+    res.json({ user, token: signUser(user), message: 'Perfil atualizado com sucesso.' });
+  })
+);
+
+authRoutes.put(
+  '/me/password',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Senha atual e nova senha são obrigatórias.' });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ message: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    }
+
+    const user = await db.get('SELECT id, senha_hash FROM usuarios WHERE id = ?', req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuário não encontrado.' });
+    }
+
+    const passwordMatches = await bcrypt.compare(currentPassword, user.senha_hash);
+    if (!passwordMatches) {
+      return res.status(400).json({ message: 'Senha atual inválida.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.run('UPDATE usuarios SET senha_hash = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?', hash, req.user.id);
+
+    res.json({ message: 'Senha alterada com sucesso.' });
+  })
+);

@@ -192,15 +192,18 @@ async function makeFilePublic(drive, fileId) {
   });
 }
 
-export async function uploadStudentDocumentToDrive({ studentName, file }) {
+export async function uploadStudentDocumentToDrive({ studentName, classFolderName, file }) {
   const drive = await getDriveClient();
   const studentsRootFolder = await getStudentsRootFolder(drive);
   const studentFolder = await findOrCreateFolder(drive, studentName, studentsRootFolder.id);
+  const targetFolder = classFolderName
+    ? await findOrCreateFolder(drive, classFolderName, studentFolder.id)
+    : studentFolder;
 
   const { data } = await drive.files.create({
     requestBody: {
       name: file.originalname,
-      parents: [studentFolder.id]
+      parents: [targetFolder.id]
     },
     media: {
       mimeType: file.mimetype || 'application/octet-stream',
@@ -217,7 +220,7 @@ export async function uploadStudentDocumentToDrive({ studentName, file }) {
   return {
     fileId: data.id,
     fileName: data.name,
-    folderId: studentFolder.id,
+    folderId: targetFolder.id,
     url: data.webViewLink
   };
 }

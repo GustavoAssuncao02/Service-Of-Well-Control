@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, Edit3, ExternalLink, FileText, FileUp, GraduationCap, Mail, MapPin, Phone, Save, Trash2, UserRound, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Edit3, ExternalLink, FileText, FileUp, Folder, GraduationCap, Mail, MapPin, Phone, Save, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
@@ -78,6 +78,39 @@ function handleRowKeyDown(event, action) {
   }
 }
 
+function classLabel(turma) {
+  return `${turma.curso_nome} - ${formatDate(turma.data_inicio)} a ${formatDate(turma.data_fim)}`;
+}
+
+function documentClassLabel(document) {
+  return `${document.turma_curso_nome || 'Turma'} - ${formatDate(document.turma_data_inicio)} a ${formatDate(document.turma_data_fim)}`;
+}
+
+function DocumentRow({ document, onRemove }) {
+  return (
+    <div className="document-row">
+      <FileText size={20} />
+      <div>
+        <strong>{document.nome_arquivo}</strong>
+        <small>
+          {document.tipo_arquivo || 'Arquivo'} - {formatFileSize(document.tamanho_bytes)}
+        </small>
+        <span>{document.drive_url ? 'Salvo no Google Drive' : 'Google Drive pendente'}</span>
+      </div>
+      <div className="document-row-actions">
+        {document.drive_url ? (
+          <a className="icon-button" href={document.drive_url} target="_blank" rel="noreferrer" aria-label="Abrir documento no Google Drive">
+            <ExternalLink size={17} />
+          </a>
+        ) : null}
+        <button className="icon-button danger" type="button" onClick={() => onRemove(document.id)} aria-label="Remover documento">
+          <Trash2 size={17} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -89,6 +122,7 @@ export default function StudentDetails() {
   const [savingStudent, setSavingStudent] = useState(false);
   const [deletingStudent, setDeletingStudent] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [selectedDocumentClassId, setSelectedDocumentClassId] = useState('');
   const [savingDocument, setSavingDocument] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -123,6 +157,35 @@ export default function StudentDetails() {
   const sex = useMemo(() => {
     if (!student) return '';
     return student.sexo === 'Outro' ? student.sexo_outro : student.sexo;
+  }, [student]);
+
+  const documentGroups = useMemo(() => {
+    const groups = new Map();
+    const unlinked = [];
+
+    (student?.documentos || []).forEach((document) => {
+      if (!document.turma_id) {
+        unlinked.push(document);
+        return;
+      }
+
+      const key = String(document.turma_id);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: key,
+          title: documentClassLabel(document),
+          subtitle: document.turma_instrutor_nome ? `Instrutor: ${document.turma_instrutor_nome}` : '',
+          documents: []
+        });
+      }
+
+      groups.get(key).documents.push(document);
+    });
+
+    return {
+      linked: Array.from(groups.values()),
+      unlinked
+    };
   }, [student]);
 
   function update(field, value) {
@@ -185,9 +248,13 @@ export default function StudentDetails() {
       selectedFiles.forEach((file) => {
         formData.append('arquivos', file);
       });
+      if (selectedDocumentClassId) {
+        formData.append('turma_id', selectedDocumentClassId);
+      }
 
       await api.post(`/students/${id}/documents`, formData);
       setSelectedFiles([]);
+      setSelectedDocumentClassId('');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -492,29 +559,35 @@ export default function StudentDetails() {
             <span>{student.documentos?.length || 0} anexos</span>
           </div>
           {student.documentos?.length ? (
-            <div className="document-list">
-              {student.documentos.map((document) => (
-                <div key={document.id} className="document-row">
-                  <FileText size={20} />
-                  <div>
-                    <strong>{document.nome_arquivo}</strong>
-                    <small>
-                      {document.tipo_arquivo || 'Arquivo'} - {formatFileSize(document.tamanho_bytes)}
-                    </small>
-                    <span>{document.drive_url ? 'Salvo no Google Drive' : 'Google Drive pendente'}</span>
+            <div className="document-groups">
+              {documentGroups.linked.map((group) => (
+                <details key={group.id} className="document-folder" open>
+                  <summary>
+                    <Folder size={20} />
+                    <div>
+                      <strong>{group.title}</strong>
+                      {group.subtitle ? <small>{group.subtitle}</small> : null}
+                    </div>
+                    <span>{group.documents.length} anexo(s)</span>
+                  </summary>
+                  <div className="document-list document-folder-list">
+                    {group.documents.map((document) => (
+                      <DocumentRow key={document.id} document={document} onRemove={removeDocument} />
+                    ))}
                   </div>
-                  <div className="document-row-actions">
-                    {document.drive_url ? (
-                      <a className="icon-button" href={document.drive_url} target="_blank" rel="noreferrer" aria-label="Abrir documento no Google Drive">
-                        <ExternalLink size={17} />
-                      </a>
-                    ) : null}
-                    <button className="icon-button danger" type="button" onClick={() => removeDocument(document.id)} aria-label="Remover documento">
-                      <Trash2 size={17} />
-                    </button>
+                </details>
+              ))}
+
+              {documentGroups.unlinked.length ? (
+                <div className="document-unlinked">
+                  {documentGroups.linked.length ? <h3>Sem turma vinculada</h3> : null}
+                  <div className="document-list">
+                    {documentGroups.unlinked.map((document) => (
+                      <DocumentRow key={document.id} document={document} onRemove={removeDocument} />
+                    ))}
                   </div>
                 </div>
-              ))}
+              ) : null}
             </div>
           ) : (
             <EmptyState title="Sem documentos" description="Anexe documentos do aluno para deixar o cadastro preparado." />
@@ -533,6 +606,16 @@ export default function StudentDetails() {
                   {selectedFiles.length} arquivo(s): {selectedFiles.map((file) => file.name).join(', ')}
                 </small>
               ) : null}
+            </Field>
+            <Field label="Vincular a turma" hint="Opcional. Sem vínculo, o documento fica na lista geral do aluno.">
+              <select value={selectedDocumentClassId} onChange={(event) => setSelectedDocumentClassId(event.target.value)} disabled={!student.turmas?.length}>
+                <option value="">{student.turmas?.length ? 'Sem turma vinculada' : 'Aluno sem turmas vinculadas'}</option>
+                {student.turmas?.map((turma) => (
+                  <option key={turma.id} value={turma.id}>
+                    {classLabel(turma)}
+                  </option>
+                ))}
+              </select>
             </Field>
             <button className="primary-button" type="submit" disabled={savingDocument}>
               <FileUp size={18} />

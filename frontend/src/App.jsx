@@ -9,6 +9,7 @@ import ClassReport from './pages/ClassReport.jsx';
 import Companies from './pages/Companies.jsx';
 import CoursesClasses from './pages/CoursesClasses.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import DocumentBrowser from './pages/DocumentBrowser.jsx';
 import EvaluationControl from './pages/EvaluationControl.jsx';
 import EvaluationPublic from './pages/EvaluationPublic.jsx';
 import EvaluationReport from './pages/EvaluationReport.jsx';
@@ -16,6 +17,7 @@ import EvaluationsDashboard from './pages/EvaluationsDashboard.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import Instructors from './pages/Instructors.jsx';
 import Login from './pages/Login.jsx';
+import Profile from './pages/Profile.jsx';
 import Register from './pages/Register.jsx';
 import RequestAccess from './pages/RequestAccess.jsx';
 import StudentHome from './pages/StudentHome.jsx';
@@ -40,9 +42,11 @@ export default function App() {
         <Route path="/admin" element={<Layout />}>
           <Route index element={<Calendar />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="perfil" element={<Profile />} />
           <Route path="empresas" element={<Companies />} />
           <Route path="alunos" element={<Students />} />
           <Route path="alunos/:id" element={<StudentDetails />} />
+          <Route path="documentos" element={<DocumentBrowser />} />
           <Route path="instrutores" element={<Instructors />} />
           <Route path="cursos-turmas" element={<CoursesClasses />} />
           <Route path="turmas/:id" element={<ClassDetails />} />

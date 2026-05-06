@@ -2,6 +2,7 @@ import { ArrowRight, LockKeyhole, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiError } from '../api/client.js';
+import SwcLogo from '../components/SwcLogo.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const initialForm = {
@@ -41,7 +42,7 @@ export default function RequestAccess() {
   return (
     <div className="auth-page">
       <section className="auth-panel">
-        <img className="auth-logo" src="/swc-logo.svg" alt="SWC" />
+        <SwcLogo className="auth-logo" />
         <div className="section-heading">
           <span>Acesso ao sistema</span>
           <h1>Solicitar usuário admin</h1>

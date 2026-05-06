@@ -13,6 +13,22 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('swc_token');
+      localStorage.removeItem('swc_user');
+
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export function getApiError(error) {
   return error?.response?.data?.message || 'Não foi possível concluir a operação.';
 }

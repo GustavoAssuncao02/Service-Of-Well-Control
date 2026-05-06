@@ -176,7 +176,7 @@ export default function Students() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack students-page">
       <div className="section-heading">
         <span>Cadastros</span>
         <h1>Alunos</h1>
@@ -315,7 +315,7 @@ export default function Students() {
         </Field>
 
         {filteredStudents.length ? (
-          <div className="table-wrap">
+          <div className="table-wrap students-table-wrap">
             <table>
               <thead>
                 <tr>

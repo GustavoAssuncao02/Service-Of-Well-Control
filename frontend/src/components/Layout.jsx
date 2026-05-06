@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Cake,
   ClipboardCheck,
+  FileSearch,
   GraduationCap,
   History,
   LayoutDashboard,
@@ -21,12 +22,14 @@ import {
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import SwcLogo from './SwcLogo.jsx';
 
 const navItems = [
   { to: '/admin', label: 'Calendário', icon: CalendarDays },
   { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/empresas', label: 'Empresas', icon: Building2 },
   { to: '/admin/alunos', label: 'Alunos', icon: Users },
+  { to: '/admin/documentos', label: 'Consultar documentos', icon: FileSearch },
   { to: '/admin/instrutores', label: 'Instrutores', icon: GraduationCap },
   { to: '/admin/cursos-turmas', label: 'Cursos e turmas', icon: BookOpen },
   { to: '/admin/avaliacoes', label: 'Avaliações', icon: Star },
@@ -55,7 +58,7 @@ export default function Layout() {
     <div className={`shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className={`sidebar ${open ? 'is-open' : ''}`}>
         <div className="brand">
-          <img src="/swc-logo.svg" alt="SWC" />
+          <SwcLogo />
         </div>
 
         <button
@@ -93,10 +96,10 @@ export default function Layout() {
             </div>
           </div>
           <div className="topbar-actions">
-            <span className="user-chip">
+            <button className="user-chip" type="button" onClick={() => navigate('/admin/perfil')}>
               <Users size={16} />
               {user?.nome}
-            </span>
+            </button>
             <button className="ghost-button" type="button" onClick={handleLogout}>
               <LogOut size={16} />
               Sair
