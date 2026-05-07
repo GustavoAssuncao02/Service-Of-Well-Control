@@ -20,6 +20,7 @@ import { dashboardRoutes } from './routes/dashboard.routes.js';
 import { calendarRoutes } from './routes/calendar.routes.js';
 import { historyRoutes } from './routes/history.routes.js';
 import { userAreaRoutes } from './routes/userArea.routes.js';
+import { driveRoutes } from './routes/drive.routes.js';
 
 await initializeDatabase();
 
@@ -68,6 +69,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/user-area', userAreaRoutes);
+app.use('/api/drive', driveRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Rota não encontrada.' });

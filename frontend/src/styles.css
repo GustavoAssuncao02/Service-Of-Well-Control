@@ -770,7 +770,7 @@ input[readonly] {
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid rgba(221, 227, 240, 0.8);
-  padding: 0 32px;
+  padding: 0 20px;
 }
 
 .topbar-start {
@@ -812,7 +812,7 @@ input[readonly] {
 }
 
 /* ─── Content & Panels ──────────────────────────────────── */
-.content { padding: 32px; }
+.content { padding: 32px 20px; }
 
 .panel, .stat-card, .metric {
   background: var(--surface);

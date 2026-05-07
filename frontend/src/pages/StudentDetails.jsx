@@ -5,6 +5,7 @@ import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
 import { formatFileSize, isDoneStatus, isVisiblePlace } from '../utils/display.js';
+import { openDriveFile } from '../utils/openDriveFile.js';
 
 const sexOptions = ['Masculino', 'Feminino', 'Prefiro não dizer', 'Outro'];
 const operations = ['Workover', 'Perfuração', 'Perfuração + Workover'];
@@ -86,7 +87,7 @@ function documentClassLabel(document) {
   return `${document.turma_curso_nome || 'Turma'} - ${formatDate(document.turma_data_inicio)} a ${formatDate(document.turma_data_fim)}`;
 }
 
-function DocumentRow({ document, onRemove }) {
+function DocumentRow({ document, onOpen, onRemove }) {
   return (
     <div className="document-row">
       <FileText size={20} />
@@ -98,10 +99,10 @@ function DocumentRow({ document, onRemove }) {
         <span>{document.drive_url ? 'Salvo no Google Drive' : 'Google Drive pendente'}</span>
       </div>
       <div className="document-row-actions">
-        {document.drive_url ? (
-          <a className="icon-button" href={document.drive_url} target="_blank" rel="noreferrer" aria-label="Abrir documento no Google Drive">
+        {document.drive_file_id ? (
+          <button className="icon-button" type="button" onClick={() => onOpen(document)} aria-label="Abrir documento">
             <ExternalLink size={17} />
-          </a>
+          </button>
         ) : null}
         <button className="icon-button danger" type="button" onClick={() => onRemove(document.id)} aria-label="Remover documento">
           <Trash2 size={17} />
@@ -281,6 +282,15 @@ export default function StudentDetails() {
     try {
       await api.delete(`/students/${id}/documents/${documentId}`);
       await loadStudent();
+    } catch (err) {
+      setError(getApiError(err));
+    }
+  }
+
+  async function openDocument(document) {
+    setError('');
+    try {
+      await openDriveFile(document.drive_file_id);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -640,7 +650,7 @@ export default function StudentDetails() {
                   </summary>
                   <div className="document-list document-folder-list">
                     {group.documents.map((document) => (
-                      <DocumentRow key={document.id} document={document} onRemove={removeDocument} />
+                      <DocumentRow key={document.id} document={document} onOpen={openDocument} onRemove={removeDocument} />
                     ))}
                   </div>
                 </details>
@@ -651,7 +661,7 @@ export default function StudentDetails() {
                   {documentGroups.linked.length ? <h3>Sem turma vinculada</h3> : null}
                   <div className="document-list">
                     {documentGroups.unlinked.map((document) => (
-                      <DocumentRow key={document.id} document={document} onRemove={removeDocument} />
+                      <DocumentRow key={document.id} document={document} onOpen={openDocument} onRemove={removeDocument} />
                     ))}
                   </div>
                 </div>

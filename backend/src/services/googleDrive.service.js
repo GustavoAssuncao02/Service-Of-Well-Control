@@ -297,6 +297,33 @@ export async function uploadUserAreaFileToDrive({ userId, userName, folderDriveI
   };
 }
 
+export async function getDriveFileMetadata(fileId) {
+  const drive = await getDriveClient();
+  const { data } = await drive.files.get({
+    fileId,
+    fields: 'id, name, mimeType, size',
+    supportsAllDrives: true
+  });
+
+  return data;
+}
+
+export async function getDriveFileStream(fileId) {
+  const drive = await getDriveClient();
+  const { data } = await drive.files.get(
+    {
+      fileId,
+      alt: 'media',
+      supportsAllDrives: true
+    },
+    {
+      responseType: 'stream'
+    }
+  );
+
+  return data;
+}
+
 export async function deleteDriveFile(fileId) {
   if (!env.googleDriveEnabled || !fileId || !env.googleDriveDeleteFiles) return;
 

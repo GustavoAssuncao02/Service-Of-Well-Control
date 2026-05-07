@@ -4,6 +4,7 @@ import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
 import { formatFileSize } from '../utils/display.js';
+import { openDriveFile } from '../utils/openDriveFile.js';
 
 const emptyArea = {
   folders: [],
@@ -155,6 +156,15 @@ export default function UserArea() {
       setError(getApiError(err));
     } finally {
       setDeletingFileId(null);
+    }
+  }
+
+  async function openFile(file) {
+    setError('');
+    try {
+      await openDriveFile(file.drive_file_id);
+    } catch (err) {
+      setError(getApiError(err));
     }
   }
 
@@ -343,10 +353,10 @@ export default function UserArea() {
                       </span>
                     </div>
                     <div className="document-row-actions">
-                      {file.drive_url ? (
-                        <a className="icon-button" href={file.drive_url} target="_blank" rel="noreferrer" aria-label="Abrir arquivo no Google Drive">
+                      {file.drive_file_id ? (
+                        <button className="icon-button" type="button" onClick={() => openFile(file)} aria-label="Abrir arquivo">
                           <ExternalLink size={17} />
-                        </a>
+                        </button>
                       ) : null}
                       <button
                         className="icon-button danger"

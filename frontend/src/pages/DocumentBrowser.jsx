@@ -5,6 +5,7 @@ import { api, getApiError } from '../api/client.js';
 import { EmptyState } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
 import { formatFileSize } from '../utils/display.js';
+import { openDriveFile } from '../utils/openDriveFile.js';
 
 const emptyData = {
   years: [],
@@ -152,6 +153,15 @@ export default function DocumentBrowser() {
 
   function selectStudent(studentId) {
     setSelection((current) => ({ ...current, studentId: String(studentId) }));
+  }
+
+  async function openDocument(document) {
+    setError('');
+    try {
+      await openDriveFile(document.drive_file_id);
+    } catch (err) {
+      setError(getApiError(err));
+    }
   }
 
   return (
@@ -303,10 +313,10 @@ export default function DocumentBrowser() {
                           {document.tipo_arquivo || 'Arquivo'} - {formatFileSize(document.tamanho_bytes)}
                         </small>
                       </div>
-                      {document.drive_url ? (
-                        <a className="icon-button" href={document.drive_url} target="_blank" rel="noreferrer" aria-label="Abrir documento">
+                      {document.drive_file_id ? (
+                        <button className="icon-button" type="button" onClick={() => openDocument(document)} aria-label="Abrir documento">
                           <ExternalLink size={17} />
-                        </a>
+                        </button>
                       ) : null}
                     </div>
                   ))}
