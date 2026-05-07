@@ -103,41 +103,62 @@ export default function DocumentBrowser() {
     };
   }, []);
 
-  const filteredMonths = useMemo(
-    () => data.months.filter((item) => String(item.year) === String(selection.year)),
-    [data.months, selection.year]
-  );
-  const selectedMonth = useMemo(
-    () => filteredMonths.find((item) => String(item.month) === String(selection.month)),
-    [filteredMonths, selection.month]
-  );
-  const filteredClasses = useMemo(
-    () =>
-      data.classes.filter(
-        (item) =>
-          String(item.ano) === String(selection.year) &&
-          String(item.mes) === String(selection.month)
-      ),
-    [data.classes, selection.year, selection.month]
-  );
-  const selectedClass = useMemo(() => data.classes.find((item) => String(item.id) === String(selection.classId)), [data.classes, selection.classId]);
-  const filteredStudents = useMemo(
-    () => data.students.filter((item) => String(item.turma_id) === String(selection.classId)),
-    [data.students, selection.classId]
-  );
-  const selectedStudent = useMemo(
-    () => filteredStudents.find((item) => String(item.id) === String(selection.studentId)),
-    [filteredStudents, selection.studentId]
-  );
-  const filteredDocuments = useMemo(
-    () =>
-      data.documents.filter(
-        (item) =>
-          String(item.turma_id) === String(selection.classId) &&
-          String(item.aluno_id) === String(selection.studentId)
-      ),
-    [data.documents, selection.classId, selection.studentId]
-  );
+  const browserIndex = useMemo(() => {
+    const monthsByYear = new Map();
+    const monthByYearMonth = new Map();
+    const classesByYearMonth = new Map();
+    const classById = new Map();
+    const studentsByClass = new Map();
+    const studentByClassStudent = new Map();
+    const documentsByClassStudent = new Map();
+
+    data.months.forEach((month) => {
+      const yearKey = String(month.year);
+      const monthKey = String(month.month);
+      const yearMonthKey = `${yearKey}-${monthKey}`;
+      if (!monthsByYear.has(yearKey)) monthsByYear.set(yearKey, []);
+      monthsByYear.get(yearKey).push(month);
+      monthByYearMonth.set(yearMonthKey, month);
+    });
+
+    data.classes.forEach((turma) => {
+      const yearMonthKey = `${turma.ano}-${turma.mes}`;
+      if (!classesByYearMonth.has(yearMonthKey)) classesByYearMonth.set(yearMonthKey, []);
+      classesByYearMonth.get(yearMonthKey).push(turma);
+      classById.set(String(turma.id), turma);
+    });
+
+    data.students.forEach((student) => {
+      const classKey = String(student.turma_id);
+      if (!studentsByClass.has(classKey)) studentsByClass.set(classKey, []);
+      studentsByClass.get(classKey).push(student);
+      studentByClassStudent.set(`${classKey}-${student.id}`, student);
+    });
+
+    data.documents.forEach((document) => {
+      const key = `${document.turma_id}-${document.aluno_id}`;
+      if (!documentsByClassStudent.has(key)) documentsByClassStudent.set(key, []);
+      documentsByClassStudent.get(key).push(document);
+    });
+
+    return {
+      monthsByYear,
+      monthByYearMonth,
+      classesByYearMonth,
+      classById,
+      studentsByClass,
+      studentByClassStudent,
+      documentsByClassStudent
+    };
+  }, [data]);
+
+  const filteredMonths = browserIndex.monthsByYear.get(String(selection.year)) || [];
+  const selectedMonth = browserIndex.monthByYearMonth.get(`${selection.year}-${selection.month}`);
+  const filteredClasses = browserIndex.classesByYearMonth.get(`${selection.year}-${selection.month}`) || [];
+  const selectedClass = browserIndex.classById.get(String(selection.classId));
+  const filteredStudents = browserIndex.studentsByClass.get(String(selection.classId)) || [];
+  const selectedStudent = browserIndex.studentByClassStudent.get(`${selection.classId}-${selection.studentId}`);
+  const filteredDocuments = browserIndex.documentsByClassStudent.get(`${selection.classId}-${selection.studentId}`) || [];
 
   function selectYear(year) {
     setSelection({ year: String(year), month: '', classId: '', studentId: '' });

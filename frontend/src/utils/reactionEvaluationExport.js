@@ -1,8 +1,8 @@
 import { formatDate } from './date.js';
 import { downloadPdfCommandPagesAsPng } from './pngReport.js';
 
-const PAGE_WIDTH = 842;
-const PAGE_HEIGHT = 595;
+const PAGE_WIDTH = 595;
+const PAGE_HEIGHT = 842;
 const margin = 36;
 const contentWidth = PAGE_WIDTH - margin * 2;
 
@@ -159,6 +159,10 @@ function buildReactionEvaluationPages(evaluation) {
     commands.push(`q 0.72 G 0.45 w ${x} ${rectY} ${width} ${height} re S Q`);
   }
 
+  function line(x1, y1, x2, y2, color = '0.84', width = 0.45) {
+    commands.push(`q ${color} G ${width} w ${x1} ${y1} m ${x2} ${y2} l S Q`);
+  }
+
   function pushPage() {
     if (commands.length) pages.push(commands.join('\n'));
   }
@@ -167,93 +171,136 @@ function buildReactionEvaluationPages(evaluation) {
     pushPage();
     commands = [];
     y = PAGE_HEIGHT - margin;
-    fillRect(margin, y - 48, contentWidth, 48, '0.9 0.94 0.99');
-    strokeRect(margin, y - 48, contentWidth, 48);
-    addText('SWC - Service Of WellControl', margin + 12, y - 18, { size: 12, bold: true });
-    addText(continued ? 'Avaliacao de reacao - continuacao' : 'Avaliacao de reacao', margin + 12, y - 35, { size: 9, bold: true });
-    addText(`Nota geral: ${plainText(evaluation.nota_geral)}/10`, margin + 616, y - 18, { size: 9, bold: true });
-    addText(`Data: ${formatDate(evaluation.data_avaliacao)}`, margin + 616, y - 35, { size: 7 });
-    y -= 60;
+    fillRect(margin, y - 62, contentWidth, 62, '0.91 0.95 1');
+    strokeRect(margin, y - 62, contentWidth, 62);
+    addText('SWC - Service Of WellControl', margin + 16, y - 20, { size: 15, bold: true });
+    addText(continued ? 'Avaliacao de reacao - continuacao' : 'Avaliacao de reacao', margin + 16, y - 40, { size: 10, bold: true });
+    addText('Nota geral', margin + contentWidth - 100, y - 18, { size: 8, bold: true });
+    addText(`${Number(evaluation.nota_geral || 0).toFixed(2)}/10`, margin + contentWidth - 100, y - 38, { size: 15, bold: true });
+    addText(`Data: ${formatDate(evaluation.data_avaliacao)}`, margin + contentWidth - 100, y - 53, { size: 8 });
+    y -= 78;
   }
 
-  function addInfo(label, value, x, width, maxLines = 3) {
-    addText(label, x, y, { size: 6.2, bold: true });
-    const lines = wrapText(value, Math.max(12, Math.floor(width / 4.2))).slice(0, maxLines);
-    const lineHeight = lines.length > 2 ? 6.6 : 8;
-    const fontSize = lines.length > 2 ? 5.5 : 6.3;
-    lines.forEach((line, index) => {
-      addText(line, x, y - 8.5 - index * lineHeight, { size: fontSize });
-    });
+  function addSectionTitle(title) {
+    addText(title, margin, y, { size: 12, bold: true });
+    line(margin, y - 7, margin + contentWidth, y - 7, '0.78', 0.55);
+    y -= 22;
+  }
+
+  function wrapForWidth(value, width, size = 8.5) {
+    const maxChars = Math.max(8, Math.floor(width / (size * 0.5)));
+    return wrapText(value, maxChars);
+  }
+
+  function addField(label, value, x, topY, width, height = 34) {
+    addText(label, x, topY, { size: 7.2, bold: true });
+    wrapForWidth(value, width, 8.6)
+      .slice(0, 2)
+      .forEach((lineText, index) => {
+        addText(lineText, x, topY - 12 - index * 10, { size: 8.6 });
+      });
+    return height;
   }
 
   function addInfoBlock() {
-    const blockHeight = 96;
-    fillRect(margin, y - blockHeight, contentWidth, blockHeight, '0.98 0.99 1');
+    addSectionTitle('Dados da avaliacao');
+
+    const fields = [
+      ['Aluno', evaluation.aluno_nome],
+      ['CPF', evaluation.cpf],
+      ['Email', evaluation.aluno_email],
+      ['Telefone', evaluation.aluno_telefone],
+      ['Empresa', evaluation.empresa || 'Particular'],
+      ['Curso', evaluation.curso_nome],
+      ['Classificacao', evaluation.classificacao_nome],
+      ['Instrutor', evaluation.instrutor_nome],
+      ['Periodo', `${formatDate(evaluation.data_inicio)} a ${formatDate(evaluation.data_fim)}`],
+      ['Local / sala online', `${evaluation.local || '-'} / ${evaluation.sala_online || '-'}`],
+      ['Cidade / UF', `${evaluation.cidade || '-'} / ${evaluation.estado || '-'}`],
+      ['Status da turma', evaluation.turma_status || '-'],
+      ['Teste Zoom', evaluation.teste_zoom || '-']
+    ];
+    const columns = 3;
+    const gap = 12;
+    const fieldWidth = (contentWidth - gap * (columns - 1)) / columns;
+    const rowHeight = 38;
+    const rows = Math.ceil(fields.length / columns);
+    const blockHeight = rows * rowHeight + 18;
+
+    fillRect(margin, y - blockHeight, contentWidth, blockHeight, '0.985 0.99 1');
     strokeRect(margin, y - blockHeight, contentWidth, blockHeight);
 
-    addInfo('Aluno', evaluation.aluno_nome, margin + 12, 238);
-    addInfo('CPF', evaluation.cpf, margin + 266, 92);
-    addInfo('Email', evaluation.aluno_email, margin + 374, 242);
-    addInfo('Telefone', evaluation.aluno_telefone, margin + 632, 116);
+    fields.forEach(([label, value], index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = margin + 14 + column * (fieldWidth + gap);
+      const fieldY = y - 16 - row * rowHeight;
+      addField(label, value, x, fieldY, fieldWidth - 18);
+    });
 
-    y -= 30;
-    addInfo('Empresa', evaluation.empresa || 'Particular', margin + 12, 258);
-    addInfo('Curso', evaluation.curso_nome, margin + 286, 170);
-    addInfo('Classificacao', evaluation.classificacao_nome, margin + 472, 124);
-    addInfo('Instrutor', evaluation.instrutor_nome, margin + 612, 136);
+    y -= blockHeight + 16;
+  }
 
-    y -= 30;
-    addInfo('Periodo', `${formatDate(evaluation.data_inicio)} a ${formatDate(evaluation.data_fim)}`, margin + 12, 154);
-    addInfo('Local / sala online', `${evaluation.local || '-'} / ${evaluation.sala_online || '-'}`, margin + 182, 246);
-    addInfo('Cidade / UF', `${evaluation.cidade || '-'} / ${evaluation.estado || '-'}`, margin + 444, 132);
-    addInfo('Status da turma', evaluation.turma_status, margin + 592, 156);
+  function addScoreStrip() {
+    const gap = 12;
+    const cardWidth = (contentWidth - gap * 2) / 3;
+    const cards = [
+      ['Nota geral', `${Number(evaluation.nota_geral || 0).toFixed(2)}/10`],
+      ['Teste Zoom', evaluation.teste_zoom || '-'],
+      ['Data da avaliacao', formatDate(evaluation.data_avaliacao)]
+    ];
 
-    y -= 36;
+    cards.forEach(([label, value], index) => {
+      const x = margin + index * (cardWidth + gap);
+      fillRect(x, y - 48, cardWidth, 48, index === 0 ? '0.9 0.96 0.92' : '0.96 0.98 1');
+      strokeRect(x, y - 48, cardWidth, 48);
+      addText(label, x + 12, y - 18, { size: 8, bold: true });
+      addText(value, x + 12, y - 34, { size: index === 0 ? 12 : 10, bold: true });
+    });
+
+    y -= 66;
   }
 
   function addCriteriaHeader() {
-    fillRect(margin, y - 18, contentWidth, 18, '0.9 0.94 0.99');
-    strokeRect(margin, y - 18, 38, 18);
-    strokeRect(margin + 38, y - 18, 640, 18);
-    strokeRect(margin + 678, y - 18, 92, 18);
-    addText('#', margin + 12, y - 11, { size: 6.3, bold: true });
-    addText('Criterio avaliado', margin + 48, y - 11, { size: 6.3, bold: true });
-    addText('Nota', margin + 710, y - 11, { size: 6.3, bold: true });
-    y -= 18;
+    fillRect(margin, y - 24, contentWidth, 24, '0.91 0.95 1');
+    strokeRect(margin, y - 24, 34, 24);
+    strokeRect(margin + 34, y - 24, contentWidth - 88, 24);
+    strokeRect(margin + contentWidth - 54, y - 24, 54, 24);
+    addText('#', margin + 12, y - 15, { size: 8, bold: true });
+    addText('Criterio avaliado', margin + 44, y - 15, { size: 8, bold: true });
+    addText('Nota', margin + contentWidth - 38, y - 15, { size: 8, bold: true });
+    y -= 24;
   }
 
   function addCriteriaRow(label, value, index) {
-    const rowHeight = 16;
+    const rowHeight = 20;
     if (index % 2 === 1) fillRect(margin, y - rowHeight, contentWidth, rowHeight, '0.98 0.99 1');
-    strokeRect(margin, y - rowHeight, 38, rowHeight);
-    strokeRect(margin + 38, y - rowHeight, 640, rowHeight);
-    strokeRect(margin + 678, y - rowHeight, 92, rowHeight);
-    addText(String(index + 1), margin + 12, y - 10, { size: 6.3 });
-    addText(label, margin + 48, y - 10, { size: 6.3 });
-    addText(plainText(value), margin + 712, y - 10, { size: 6.3, bold: true });
+    strokeRect(margin, y - rowHeight, 34, rowHeight);
+    strokeRect(margin + 34, y - rowHeight, contentWidth - 88, rowHeight);
+    strokeRect(margin + contentWidth - 54, y - rowHeight, 54, rowHeight);
+    addText(String(index + 1), margin + 13, y - 13, { size: 8.2 });
+    addText(label, margin + 44, y - 13, { size: 8.2 });
+    addText(plainText(value), margin + contentWidth - 34, y - 13, { size: 8.2, bold: true });
     y -= rowHeight;
   }
 
   startPage(false);
   addInfoBlock();
-  addText('Avaliacao de reacao', margin, y, { size: 9, bold: true });
-  y -= 10;
+  addSectionTitle('Avaliacao de reacao');
   addCriteriaHeader();
   reactionCriteriaLabels.forEach((label, index) => addCriteriaRow(label, evaluation[`nota_${index + 1}`], index));
 
-  y -= 8;
-  addText(`Teste Zoom: ${evaluation.teste_zoom || '-'}`, margin, y, { size: 7, bold: true });
-  y -= 12;
-  addText('Comentario', margin, y, { size: 7, bold: true });
-  y -= 10;
-  const commentLines = wrapText(evaluation.comentario || 'Sem comentario.', 138);
-  const availableHeight = Math.max(18, y - margin);
-  const lineHeight = Math.max(5.4, Math.min(8.2, availableHeight / commentLines.length));
-  const fontSize = Math.max(4.8, Math.min(6.5, lineHeight - 1));
-  commentLines.forEach((line) => {
-    addText(line, margin, y, { size: fontSize });
-    y -= lineHeight;
+  y -= 16;
+  if (y < margin + 90) startPage(true);
+  addSectionTitle('Comentario');
+  const commentLines = wrapForWidth(evaluation.comentario || 'Sem comentario.', contentWidth - 24, 8.8);
+  const commentHeight = Math.max(62, commentLines.length * 11 + 22);
+  fillRect(margin, y - commentHeight, contentWidth, commentHeight, '0.985 0.99 1');
+  strokeRect(margin, y - commentHeight, contentWidth, commentHeight);
+  commentLines.forEach((lineText, index) => {
+    addText(lineText, margin + 12, y - 18 - index * 11, { size: 8.8 });
   });
+  y -= commentHeight;
 
   pushPage();
   return pages;

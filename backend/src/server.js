@@ -48,7 +48,8 @@ app.get('/api/health/drive', (req, res) => {
     hasStudentsFolderId: Boolean(env.googleDriveStudentsFolderId),
     studentsFolderName: env.googleDriveStudentsFolderName,
     userAreaFolderName: env.googleDriveUserAreaFolderName,
-    maxUploadMb: env.googleDriveMaxUploadMb
+    maxUploadMb: env.googleDriveMaxUploadMb,
+    uploadConcurrency: env.googleDriveUploadConcurrency
   });
 });
 

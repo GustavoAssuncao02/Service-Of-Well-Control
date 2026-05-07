@@ -3,7 +3,7 @@ import multer from 'multer';
 import { env } from '../config/env.js';
 import { getDb } from '../database/db.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
-import { deleteDriveFile, uploadStudentDocumentToDrive } from '../services/googleDrive.service.js';
+import { deleteDriveFile, uploadStudentDocumentsToDrive } from '../services/googleDrive.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { firstName, onlyDigits } from '../utils/format.js';
 
@@ -782,14 +782,13 @@ studentRoutes.post(
     const uploadedFiles = [];
     const insertedIds = [];
     try {
-      for (const file of files) {
-        const driveFile = await uploadStudentDocumentToDrive({
+      uploadedFiles.push(
+        ...(await uploadStudentDocumentsToDrive({
           studentName: student.nome_completo,
           classFolderName: selectedClass ? classFolderName(selectedClass) : '',
-          file
-        });
-        uploadedFiles.push({ file, driveFile });
-      }
+          files
+        }))
+      );
 
       await db.exec('START TRANSACTION');
 

@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { getDb } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
-import { getDriveFileMetadata, getDriveFileStream } from '../services/googleDrive.service.js';
+import { getDriveFileStream } from '../services/googleDrive.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const driveRoutes = Router();
@@ -25,7 +25,7 @@ function createFileTicket(user, fileId) {
       role: user.role
     },
     env.jwtSecret,
-    { expiresIn: '90s' }
+    { expiresIn: '10m' }
   );
 }
 
@@ -49,7 +49,7 @@ function verifyFileTicket(req, res, next) {
 
 async function findAccessibleFile(db, user, fileId) {
   const userFile = await db.get(
-    `SELECT drive_file_id, nome_arquivo, tipo_arquivo
+    `SELECT drive_file_id, nome_arquivo, tipo_arquivo, tamanho_bytes
      FROM usuario_arquivos
      WHERE drive_file_id = ? AND usuario_id = ?`,
     fileId,
@@ -61,7 +61,7 @@ async function findAccessibleFile(db, user, fileId) {
   if (user.role !== 'admin') return null;
 
   return db.get(
-    `SELECT drive_file_id, nome_arquivo, tipo_arquivo
+    `SELECT drive_file_id, nome_arquivo, tipo_arquivo, tamanho_bytes
      FROM aluno_documentos
      WHERE drive_file_id = ?`,
     fileId
@@ -96,20 +96,29 @@ driveRoutes.get(
       return res.status(404).json({ message: 'Arquivo nao encontrado.' });
     }
 
-    const metadata = await getDriveFileMetadata(file.drive_file_id);
-    const fileStream = await getDriveFileStream(file.drive_file_id);
-    const fileName = metadata.name || file.nome_arquivo || 'arquivo';
-    const mimeType = metadata.mimeType || file.tipo_arquivo || 'application/octet-stream';
+    const driveFile = await getDriveFileStream(file.drive_file_id, req.headers.range || '');
+    const fileName = file.nome_arquivo || 'arquivo';
+    const mimeType = driveFile.headers['content-type'] || file.tipo_arquivo || 'application/octet-stream';
+    const contentLength = driveFile.headers['content-length'] || file.tamanho_bytes;
+
+    if (driveFile.status === 206 || driveFile.headers['content-range']) {
+      res.status(206);
+    }
 
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', contentDispositionFilename(fileName));
-    res.setHeader('Cache-Control', 'private, max-age=60');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('Accept-Ranges', 'bytes');
 
-    if (metadata.size) {
-      res.setHeader('Content-Length', metadata.size);
+    if (driveFile.headers['content-range']) {
+      res.setHeader('Content-Range', driveFile.headers['content-range']);
     }
 
-    fileStream.on('error', (error) => {
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+
+    driveFile.stream.on('error', (error) => {
       if (!res.headersSent) {
         res.status(500).json({ message: 'Nao foi possivel abrir o arquivo.' });
       } else {
@@ -117,6 +126,6 @@ driveRoutes.get(
       }
     });
 
-    fileStream.pipe(res);
+    driveFile.stream.pipe(res);
   })
 );

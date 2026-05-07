@@ -68,5 +68,6 @@ export const env = {
   googleDriveUserAreaFolderName: envValue('GOOGLE_DRIVE_USER_AREA_FOLDER_NAME') || 'Usuarios',
   googleDriveMakeFilesPublic: envBoolean('GOOGLE_DRIVE_MAKE_FILES_PUBLIC'),
   googleDriveDeleteFiles: envBoolean('GOOGLE_DRIVE_DELETE_FILES', true),
-  googleDriveMaxUploadMb: envNumber('GOOGLE_DRIVE_MAX_UPLOAD_MB', 25) || 25
+  googleDriveMaxUploadMb: envNumber('GOOGLE_DRIVE_MAX_UPLOAD_MB', 25) || 25,
+  googleDriveUploadConcurrency: Math.max(1, Math.min(8, envNumber('GOOGLE_DRIVE_UPLOAD_CONCURRENCY', 4) || 4))
 };

@@ -10,6 +10,7 @@ const driveScopes = ['https://www.googleapis.com/auth/drive'];
 let driveClientPromise;
 let studentsRootFolderPromise;
 let userAreaRootFolderPromise;
+const folderPromiseCache = new Map();
 
 function createHttpError(message, status = 500) {
   const error = new Error(message);
@@ -163,6 +164,37 @@ async function findOrCreateFolder(drive, name, parentFolderId = '') {
   return createFolder(drive, name, parentFolderId);
 }
 
+async function findOrCreateFolderCached(drive, name, parentFolderId = '') {
+  const cacheKey = `${parentFolderId || 'root'}::${name}`;
+
+  if (!folderPromiseCache.has(cacheKey)) {
+    const promise = findOrCreateFolder(drive, name, parentFolderId).catch((error) => {
+      folderPromiseCache.delete(cacheKey);
+      throw error;
+    });
+    folderPromiseCache.set(cacheKey, promise);
+  }
+
+  return folderPromiseCache.get(cacheKey);
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 async function getStudentsRootFolder(drive) {
   if (env.googleDriveStudentsFolderId) {
     return {
@@ -208,7 +240,7 @@ function userAreaFolderName({ userId, userName }) {
 
 async function getUserDriveFolder(drive, user) {
   const userAreaRootFolder = await getUserAreaRootFolder(drive);
-  return findOrCreateFolder(drive, userAreaFolderName(user), userAreaRootFolder.id);
+  return findOrCreateFolderCached(drive, userAreaFolderName(user), userAreaRootFolder.id);
 }
 
 async function makeFilePublic(drive, fileId) {
@@ -222,56 +254,7 @@ async function makeFilePublic(drive, fileId) {
   });
 }
 
-export async function uploadStudentDocumentToDrive({ studentName, classFolderName, file }) {
-  const drive = await getDriveClient();
-  const studentsRootFolder = await getStudentsRootFolder(drive);
-  const studentFolder = await findOrCreateFolder(drive, studentName, studentsRootFolder.id);
-  const targetFolder = classFolderName
-    ? await findOrCreateFolder(drive, classFolderName, studentFolder.id)
-    : studentFolder;
-
-  const { data } = await drive.files.create({
-    requestBody: {
-      name: file.originalname,
-      parents: [targetFolder.id]
-    },
-    media: {
-      mimeType: file.mimetype || 'application/octet-stream',
-      body: Readable.from(file.buffer)
-    },
-    fields: 'id, name, webViewLink',
-    supportsAllDrives: true
-  });
-
-  if (env.googleDriveMakeFilesPublic) {
-    await makeFilePublic(drive, data.id);
-  }
-
-  return {
-    fileId: data.id,
-    fileName: data.name,
-    folderId: targetFolder.id,
-    url: data.webViewLink
-  };
-}
-
-export async function createUserAreaFolderOnDrive({ userId, userName, folderName }) {
-  const drive = await getDriveClient();
-  const userFolder = await getUserDriveFolder(drive, { userId, userName });
-  const folder = await createFolder(drive, folderName, userFolder.id);
-
-  return {
-    folderId: folder.id,
-    folderName: folder.name,
-    url: folder.webViewLink
-  };
-}
-
-export async function uploadUserAreaFileToDrive({ userId, userName, folderDriveId, file }) {
-  const drive = await getDriveClient();
-  const userFolder = folderDriveId ? null : await getUserDriveFolder(drive, { userId, userName });
-  const targetFolderId = folderDriveId || userFolder.id;
-
+async function uploadFileToFolder(drive, targetFolderId, file) {
   const { data } = await drive.files.create({
     requestBody: {
       name: file.originalname,
@@ -297,6 +280,61 @@ export async function uploadUserAreaFileToDrive({ userId, userName, folderDriveI
   };
 }
 
+async function getStudentDocumentTargetFolder(drive, { studentName, classFolderName }) {
+  const studentsRootFolder = await getStudentsRootFolder(drive);
+  const studentFolder = await findOrCreateFolderCached(drive, studentName, studentsRootFolder.id);
+  return classFolderName
+    ? findOrCreateFolderCached(drive, classFolderName, studentFolder.id)
+    : studentFolder;
+}
+
+export async function uploadStudentDocumentToDrive({ studentName, classFolderName, file }) {
+  const drive = await getDriveClient();
+  const targetFolder = await getStudentDocumentTargetFolder(drive, { studentName, classFolderName });
+  return uploadFileToFolder(drive, targetFolder.id, file);
+}
+
+export async function uploadStudentDocumentsToDrive({ studentName, classFolderName, files }) {
+  const drive = await getDriveClient();
+  const targetFolder = await getStudentDocumentTargetFolder(drive, { studentName, classFolderName });
+
+  return mapWithConcurrency(files, env.googleDriveUploadConcurrency, async (file) => ({
+    file,
+    driveFile: await uploadFileToFolder(drive, targetFolder.id, file)
+  }));
+}
+
+export async function createUserAreaFolderOnDrive({ userId, userName, folderName }) {
+  const drive = await getDriveClient();
+  const userFolder = await getUserDriveFolder(drive, { userId, userName });
+  const folder = await createFolder(drive, folderName, userFolder.id);
+
+  return {
+    folderId: folder.id,
+    folderName: folder.name,
+    url: folder.webViewLink
+  };
+}
+
+export async function uploadUserAreaFileToDrive({ userId, userName, folderDriveId, file }) {
+  const drive = await getDriveClient();
+  const userFolder = folderDriveId ? null : await getUserDriveFolder(drive, { userId, userName });
+  const targetFolderId = folderDriveId || userFolder.id;
+
+  return uploadFileToFolder(drive, targetFolderId, file);
+}
+
+export async function uploadUserAreaFilesToDrive({ userId, userName, folderDriveId, files }) {
+  const drive = await getDriveClient();
+  const userFolder = folderDriveId ? null : await getUserDriveFolder(drive, { userId, userName });
+  const targetFolderId = folderDriveId || userFolder.id;
+
+  return mapWithConcurrency(files, env.googleDriveUploadConcurrency, async (file) => ({
+    file,
+    driveFile: await uploadFileToFolder(drive, targetFolderId, file)
+  }));
+}
+
 export async function getDriveFileMetadata(fileId) {
   const drive = await getDriveClient();
   const { data } = await drive.files.get({
@@ -308,20 +346,25 @@ export async function getDriveFileMetadata(fileId) {
   return data;
 }
 
-export async function getDriveFileStream(fileId) {
+export async function getDriveFileStream(fileId, range = '') {
   const drive = await getDriveClient();
-  const { data } = await drive.files.get(
+  const response = await drive.files.get(
     {
       fileId,
       alt: 'media',
       supportsAllDrives: true
     },
     {
-      responseType: 'stream'
+      responseType: 'stream',
+      headers: range ? { Range: range } : undefined
     }
   );
 
-  return data;
+  return {
+    stream: response.data,
+    headers: response.headers || {},
+    status: response.status
+  };
 }
 
 export async function deleteDriveFile(fileId) {

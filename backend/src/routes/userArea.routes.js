@@ -6,7 +6,7 @@ import { authenticate } from '../middleware/auth.js';
 import {
   createUserAreaFolderOnDrive,
   deleteDriveFile,
-  uploadUserAreaFileToDrive
+  uploadUserAreaFilesToDrive
 } from '../services/googleDrive.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -203,15 +203,14 @@ userAreaRoutes.post(
     const insertedIds = [];
 
     try {
-      for (const file of files) {
-        const driveFile = await uploadUserAreaFileToDrive({
+      uploadedFiles.push(
+        ...(await uploadUserAreaFilesToDrive({
           userId: user.id,
           userName: user.nome,
           folderDriveId: folder?.drive_folder_id || '',
-          file
-        });
-        uploadedFiles.push({ file, driveFile });
-      }
+          files
+        }))
+      );
 
       await db.exec('START TRANSACTION');
 
