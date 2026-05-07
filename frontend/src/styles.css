@@ -2038,7 +2038,9 @@ td small {
 .info-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
   gap: 4px 10px;
+  min-width: 0;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -2052,6 +2054,7 @@ td small {
 }
 
 .info-item span {
+  grid-column: 2;
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
@@ -2059,7 +2062,19 @@ td small {
   letter-spacing: 0.04em;
 }
 
-.info-item strong { overflow-wrap: anywhere; }
+.info-item strong {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.info-item:not(:has(svg)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.info-item:not(:has(svg)) span,
+.info-item:not(:has(svg)) strong {
+  grid-column: 1;
+}
 
 .detail-notes {
   display: grid;

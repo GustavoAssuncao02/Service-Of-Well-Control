@@ -808,12 +808,20 @@ studentRoutes.get(
               ta.classificacao_presenca_id AS modalidade_aula_id,
               cp.nome AS modalidade_aula_nome,
               ta.classificacao_presenca_id,
-              cp.nome AS classificacao_presenca_nome
+              cp.nome AS classificacao_presenca_nome,
+              av.id AS avaliacao_id,
+              av.data_avaliacao,
+              CASE
+                WHEN ta.status NOT LIKE 'Conclu%' THEN 'Aluno nao concluido'
+                WHEN av.id IS NULL THEN 'Nao respondeu'
+                ELSE 'Respondeu'
+              END AS avaliacao_reacao_status
        FROM turma_alunos ta
        JOIN turmas t ON t.id = ta.turma_id
        JOIN cursos c ON c.id = t.curso_id
        JOIN instrutores i ON i.id = t.instrutor_id
        JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+       LEFT JOIN avaliacoes av ON av.turma_id = ta.turma_id AND av.aluno_id = ta.aluno_id
        WHERE ta.aluno_id = ?
        ORDER BY DATE(t.data_inicio) DESC`,
       req.params.id

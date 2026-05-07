@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, Edit3, ExternalLink, FileText, FileUp, Folder, GraduationCap, Mail, MapPin, Phone, Save, Trash2, UserRound, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, Copy, Edit3, ExternalLink, Eye, FileText, FileUp, Folder, GraduationCap, Mail, MapPin, Phone, Save, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
@@ -115,6 +115,7 @@ export default function StudentDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const evaluationLinkTimeout = useRef(null);
   const [student, setStudent] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -124,6 +125,7 @@ export default function StudentDetails() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [selectedDocumentClassId, setSelectedDocumentClassId] = useState('');
   const [savingDocument, setSavingDocument] = useState(false);
+  const [copiedEvaluationClassId, setCopiedEvaluationClassId] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -142,6 +144,12 @@ export default function StudentDetails() {
 
   useEffect(() => {
     loadInitialData().catch((err) => setError(getApiError(err)));
+
+    return () => {
+      if (evaluationLinkTimeout.current) {
+        clearTimeout(evaluationLinkTimeout.current);
+      }
+    };
   }, [id]);
 
   const address = useMemo(() => {
@@ -275,6 +283,27 @@ export default function StudentDetails() {
       await loadStudent();
     } catch (err) {
       setError(getApiError(err));
+    }
+  }
+
+  async function copyEvaluationLink(turmaId) {
+    const link = `${window.location.origin}/avaliacao/${turmaId}`;
+
+    if (evaluationLinkTimeout.current) {
+      clearTimeout(evaluationLinkTimeout.current);
+    }
+
+    setError('');
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedEvaluationClassId(turmaId);
+      evaluationLinkTimeout.current = setTimeout(() => {
+        setCopiedEvaluationClassId(null);
+        evaluationLinkTimeout.current = null;
+      }, 2400);
+    } catch {
+      setSuccess('');
+      setError('Nao foi possivel copiar o link de avaliacao.');
     }
   }
 
@@ -520,6 +549,7 @@ export default function StudentDetails() {
                   <th>Local</th>
                   <th>Modalidade</th>
                   <th>Status</th>
+                  <th>Avaliacao de reacao</th>
                 </tr>
               </thead>
               <tbody>
@@ -547,6 +577,38 @@ export default function StudentDetails() {
                     </td>
                     <td>
                       <span className={`status-badge ${isDoneStatus(turma.status_turma) ? 'done' : 'active'}`}>{turma.status_turma}</span>
+                    </td>
+                    <td>
+                      <div className="inline-actions compact-actions">
+                        <span className={`status-badge ${turma.avaliacao_id ? 'done' : 'pending'}`}>
+                          {turma.avaliacao_reacao_status || (turma.avaliacao_id ? 'Respondeu' : 'Nao respondeu')}
+                        </span>
+                        {turma.avaliacao_id ? (
+                          <button
+                            className="small-button"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/admin/avaliacoes/${turma.avaliacao_id}`);
+                            }}
+                          >
+                            <Eye size={15} />
+                            Ver avaliacao
+                          </button>
+                        ) : (
+                          <button
+                            className={`small-button ${copiedEvaluationClassId === turma.id ? 'success' : ''}`}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              copyEvaluationLink(turma.id);
+                            }}
+                          >
+                            {copiedEvaluationClassId === turma.id ? <CheckCircle2 size={15} /> : <Copy size={15} />}
+                            {copiedEvaluationClassId === turma.id ? 'Link copiado' : 'Copiar link'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

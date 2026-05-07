@@ -366,7 +366,6 @@ export default function ClassReport() {
                   <th>Modalidade</th>
                   <th>Avaliacoes</th>
                   <th>Resposta</th>
-                  <th>Media</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -409,7 +408,6 @@ export default function ClassReport() {
                       <small>{turma.avaliacoes_pendentes || 0} pendentes</small>
                     </td>
                     <td>{formatPercent(turma.taxa_resposta)}</td>
-                    <td>{turma.media_geral === null ? '-' : formatNumber(turma.media_geral, 2)}</td>
                     <td>
                       <span className={`status-badge ${isDoneStatus(turma.status) ? 'done' : 'active'}`}>{turma.status}</span>
                     </td>

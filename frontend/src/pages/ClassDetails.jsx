@@ -25,6 +25,14 @@ function handleRowKeyDown(event, action) {
   }
 }
 
+function evaluationAverageLabel(turma) {
+  const total = Number(turma.total_avaliacoes_reacao || 0);
+  if (!total) return 'Sem avaliacoes';
+
+  const average = Number(turma.media_avaliacao_reacao || 0);
+  return `${average.toFixed(2)}/10 (${total} ${total === 1 ? 'resposta' : 'respostas'})`;
+}
+
 export default function ClassDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -167,6 +175,7 @@ export default function ClassDetails() {
           <InfoItem icon={CalendarDays} label="Periodo" value={`${formatDate(turma.data_inicio)} a ${formatDate(turma.data_fim)}`} />
           <InfoItem icon={GraduationCap} label="Instrutor" value={turma.instrutor_nome} />
           <InfoItem icon={UsersRound} label="Alunos" value={studentCountLabel(turma.alunos?.length || 0)} />
+          <InfoItem label="Media da avaliacao" value={evaluationAverageLabel(turma)} />
           <InfoItem label="Presenciais" value={String(presencialCount)} />
           <InfoItem label="Online" value={String(onlineCount)} />
           <InfoItem label="Classificacao" value={turma.classificacao_nome} />

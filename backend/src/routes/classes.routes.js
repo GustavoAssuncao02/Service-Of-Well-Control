@@ -410,11 +410,20 @@ classRoutes.get(
     const turma = await db.get(
       `SELECT t.*, c.nome AS curso_nome, c.descricao AS curso_descricao,
               cc.nome AS classificacao_nome,
-              i.nome AS instrutor_nome
+              i.nome AS instrutor_nome,
+              COALESCE(av_stats.total_avaliacoes_reacao, 0) AS total_avaliacoes_reacao,
+              av_stats.media_avaliacao_reacao
        FROM turmas t
        JOIN cursos c ON c.id = t.curso_id
        LEFT JOIN classificacoes_cursos cc ON cc.id = c.classificacao_id
        JOIN instrutores i ON i.id = t.instrutor_id
+       LEFT JOIN (
+         SELECT turma_id,
+                COUNT(*) AS total_avaliacoes_reacao,
+                ROUND(AVG(nota_geral), 2) AS media_avaliacao_reacao
+         FROM avaliacoes
+         GROUP BY turma_id
+       ) av_stats ON av_stats.turma_id = t.id
        WHERE t.id = ?`,
       req.params.id
     );
