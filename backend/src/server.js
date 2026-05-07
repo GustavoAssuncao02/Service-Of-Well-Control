@@ -32,6 +32,25 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'Service Of WellControl API' });
 });
 
+app.get('/api/health/drive', (req, res) => {
+  res.json({
+    ok: true,
+    enabled: env.googleDriveEnabled,
+    authType: env.googleDriveAuthType,
+    configured: env.googleDriveAuthType === 'oauth'
+      ? Boolean(env.googleDriveOauthRefreshToken && (env.googleDriveOauthClientJson || env.googleDriveOauthClientFile))
+      : Boolean(env.googleDriveCredentialsJson || env.googleDriveCredentialsFile),
+    hasServiceAccountCredentials: Boolean(env.googleDriveCredentialsJson || env.googleDriveCredentialsFile),
+    hasOauthClient: Boolean(env.googleDriveOauthClientJson || env.googleDriveOauthClientFile),
+    hasOauthRefreshToken: Boolean(env.googleDriveOauthRefreshToken),
+    hasParentFolderId: Boolean(env.googleDriveParentFolderId),
+    hasStudentsFolderId: Boolean(env.googleDriveStudentsFolderId),
+    studentsFolderName: env.googleDriveStudentsFolderName,
+    userAreaFolderName: env.googleDriveUserAreaFolderName,
+    maxUploadMb: env.googleDriveMaxUploadMb
+  });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/users', userRoutes);
