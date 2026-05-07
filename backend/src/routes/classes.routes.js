@@ -7,8 +7,78 @@ export const classRoutes = Router();
 
 classRoutes.use(authenticate, requireAdmin);
 
-async function syncClassStudents(db, turmaId, studentIds = []) {
+async function getDefaultAttendanceClassificationId(db) {
+  const defaultClassification =
+    (await db.get("SELECT id FROM classificacoes_presenca WHERE nome = 'Presencial'")) ||
+    (await db.get("SELECT id FROM classificacoes_presenca WHERE nome LIKE 'Presencial%' ORDER BY nome ASC LIMIT 1")) ||
+    (await db.get('SELECT id FROM classificacoes_presenca ORDER BY id ASC LIMIT 1'));
+
+  if (!defaultClassification) {
+    const error = new Error('Cadastre uma modalidade de aula antes de vincular alunos a turma.');
+    error.status = 400;
+    throw error;
+  }
+
+  return defaultClassification.id;
+}
+
+function normalizeStudentClassificationMap(studentClassifications = []) {
+  const map = new Map();
+
+  if (Array.isArray(studentClassifications)) {
+    studentClassifications.forEach((item) => {
+      const studentId = Number(item.aluno_id ?? item.student_id);
+      const classificationId = Number(item.modalidade_aula_id ?? item.classificacao_presenca_id ?? item.attendance_classification_id);
+      if (studentId && classificationId) {
+        map.set(studentId, classificationId);
+      }
+    });
+    return map;
+  }
+
+  if (studentClassifications && typeof studentClassifications === 'object') {
+    Object.entries(studentClassifications).forEach(([studentId, classificationId]) => {
+      const normalizedStudentId = Number(studentId);
+      const normalizedClassificationId = Number(classificationId);
+      if (normalizedStudentId && normalizedClassificationId) {
+        map.set(normalizedStudentId, normalizedClassificationId);
+      }
+    });
+  }
+
+  return map;
+}
+
+async function resolveClassStudentAssignments(db, studentIds = [], studentClassifications = []) {
   const uniqueStudentIds = [...new Set(studentIds.map(Number).filter(Boolean))];
+  const classificationMap = normalizeStudentClassificationMap(studentClassifications);
+  const defaultClassificationId = await getDefaultAttendanceClassificationId(db);
+
+  const assignments = uniqueStudentIds.map((studentId) => ({
+    studentId,
+    classificationId: classificationMap.get(studentId) || defaultClassificationId
+  }));
+
+  const classificationIds = [...new Set(assignments.map((item) => item.classificationId).filter(Boolean))];
+  if (classificationIds.length) {
+    const placeholders = classificationIds.map(() => '?').join(', ');
+    const rows = await db.all(`SELECT id FROM classificacoes_presenca WHERE id IN (${placeholders})`, classificationIds);
+    const validIds = new Set(rows.map((row) => Number(row.id)));
+    const invalidId = classificationIds.find((classificationId) => !validIds.has(Number(classificationId)));
+
+    if (invalidId) {
+      const error = new Error('Modalidade de aula invalida.');
+      error.status = 400;
+      throw error;
+    }
+  }
+
+  return assignments;
+}
+
+async function syncClassStudents(db, turmaId, studentIds = [], studentClassifications = []) {
+  const assignments = await resolveClassStudentAssignments(db, studentIds, studentClassifications);
+  const uniqueStudentIds = assignments.map((item) => item.studentId);
 
   if (!uniqueStudentIds.length) {
     await db.run('DELETE FROM turma_alunos WHERE turma_id = ?', turmaId);
@@ -18,8 +88,15 @@ async function syncClassStudents(db, turmaId, studentIds = []) {
   const placeholders = uniqueStudentIds.map(() => '?').join(', ');
   await db.run(`DELETE FROM turma_alunos WHERE turma_id = ? AND aluno_id NOT IN (${placeholders})`, turmaId, ...uniqueStudentIds);
 
-  for (const studentId of uniqueStudentIds) {
-    await db.run('INSERT IGNORE INTO turma_alunos (turma_id, aluno_id) VALUES (?, ?)', turmaId, studentId);
+  for (const assignment of assignments) {
+    await db.run(
+      `INSERT INTO turma_alunos (turma_id, aluno_id, classificacao_presenca_id)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE classificacao_presenca_id = VALUES(classificacao_presenca_id)`,
+      turmaId,
+      assignment.studentId,
+      assignment.classificationId
+    );
   }
 }
 
@@ -105,6 +182,32 @@ function buildClassReportFilters(query) {
     whereParams.push(String(query.onlineRoom).trim());
   }
 
+  const classModalityId = query.classModalityId || query.attendanceClassificationId;
+  if (classModalityId) {
+    where.push(
+      `EXISTS (
+        SELECT 1
+        FROM turma_alunos ta_presence
+        WHERE ta_presence.turma_id = t.id
+          AND ta_presence.classificacao_presenca_id = ?
+      )`
+    );
+    whereParams.push(classModalityId);
+  }
+
+  if (query.attendanceMode) {
+    where.push(
+      `EXISTS (
+        SELECT 1
+        FROM turma_alunos ta_presence
+        JOIN classificacoes_presenca cp_presence ON cp_presence.id = ta_presence.classificacao_presenca_id
+        WHERE ta_presence.turma_id = t.id
+          AND cp_presence.nome = ?
+      )`
+    );
+    whereParams.push(query.attendanceMode);
+  }
+
   if (query.hasStudents === 'yes') {
     having.push('total_alunos > 0');
   } else if (query.hasStudents === 'no') {
@@ -180,11 +283,14 @@ classRoutes.get(
     const classes = await db.all(
       `SELECT t.*, c.nome AS curso_nome, i.nome AS instrutor_nome,
               COUNT(ta.id) AS total_alunos,
-              SUM(CASE WHEN ta.status = 'Concluído' THEN 1 ELSE 0 END) AS alunos_concluidos
+              COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Presencial%' THEN ta.aluno_id END), 0) AS alunos_presenciais,
+              COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Online%' THEN ta.aluno_id END), 0) AS alunos_online,
+              COALESCE(SUM(CASE WHEN ta.status LIKE 'Conclu%' THEN 1 ELSE 0 END), 0) AS alunos_concluidos
        FROM turmas t
        JOIN cursos c ON c.id = t.curso_id
        JOIN instrutores i ON i.id = t.instrutor_id
        LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
+       LEFT JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
        ${where}
        GROUP BY t.id
        ORDER BY DATE(t.data_inicio) DESC`,
@@ -199,7 +305,7 @@ classRoutes.get(
   '/report-options',
   asyncHandler(async (req, res) => {
     const db = await getDb();
-    const [statusRows, locationRows, onlineRoomRows] = await Promise.all([
+    const [statusRows, locationRows, onlineRoomRows, attendanceClassificationRows] = await Promise.all([
       db.all(
         `SELECT DISTINCT TRIM(status) AS value
          FROM turmas
@@ -217,13 +323,20 @@ classRoutes.get(
          FROM turmas
          WHERE sala_online IS NOT NULL AND TRIM(sala_online) <> ''
          ORDER BY value ASC`
+      ),
+      db.all(
+        `SELECT id, nome, descricao
+         FROM classificacoes_presenca
+         ORDER BY nome ASC`
       )
     ]);
 
     res.json({
       statuses: statusRows.map((row) => row.value),
       locations: locationRows.map((row) => row.value),
-      onlineRooms: onlineRoomRows.map((row) => row.value)
+      onlineRooms: onlineRoomRows.map((row) => row.value),
+      classModalities: attendanceClassificationRows,
+      attendanceClassifications: attendanceClassificationRows
     });
   })
 );
@@ -250,6 +363,10 @@ classRoutes.get(
               DATE(t.criado_em) AS data_cadastro,
               DATE(t.atualizado_em) AS data_atualizacao,
               COALESCE(COUNT(DISTINCT ta.aluno_id), 0) AS total_alunos,
+              GROUP_CONCAT(DISTINCT cp.nome ORDER BY cp.nome SEPARATOR ', ') AS modalidades_aula,
+              GROUP_CONCAT(DISTINCT cp.nome ORDER BY cp.nome SEPARATOR ', ') AS classificacoes_presenca,
+              COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Presencial%' THEN ta.aluno_id END), 0) AS alunos_presenciais,
+              COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Online%' THEN ta.aluno_id END), 0) AS alunos_online,
               COALESCE(SUM(CASE WHEN ta.status LIKE 'Conclu%' THEN 1 ELSE 0 END), 0) AS alunos_concluidos,
               COALESCE(SUM(CASE WHEN ta.id IS NOT NULL AND ta.status NOT LIKE 'Conclu%' THEN 1 ELSE 0 END), 0) AS alunos_em_andamento,
               COALESCE(COUNT(DISTINCT av.id), 0) AS avaliacoes_recebidas,
@@ -273,6 +390,7 @@ classRoutes.get(
        JOIN classificacoes_cursos cc ON cc.id = c.classificacao_id
        JOIN instrutores i ON i.id = t.instrutor_id
        LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
+       LEFT JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
        LEFT JOIN avaliacoes av ON av.turma_id = t.id AND av.aluno_id = ta.aluno_id
        ${where}
        GROUP BY t.id
@@ -306,9 +424,21 @@ classRoutes.get(
     }
 
     const alunos = await db.all(
-      `SELECT a.*, ta.status AS status_turma, ta.matriculado_em, ta.concluido_em
+      `SELECT a.*, ta.status AS status_turma, ta.matriculado_em, ta.concluido_em,
+              ta.classificacao_presenca_id AS modalidade_aula_id,
+              cp.nome AS modalidade_aula_nome,
+              ta.classificacao_presenca_id,
+              cp.nome AS classificacao_presenca_nome,
+              av.id AS avaliacao_id,
+              av.data_avaliacao,
+              CASE
+                WHEN av.id IS NULL THEN 'Nao respondeu'
+                ELSE 'Respondeu'
+              END AS avaliacao_reacao_status
        FROM turma_alunos ta
        JOIN alunos a ON a.id = ta.aluno_id
+       JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+       LEFT JOIN avaliacoes av ON av.turma_id = ta.turma_id AND av.aluno_id = ta.aluno_id
        WHERE ta.turma_id = ?
        ORDER BY a.criado_em DESC`,
       req.params.id
@@ -322,7 +452,19 @@ classRoutes.post(
   '/',
   asyncHandler(async (req, res) => {
     const db = await getDb();
-    const { curso_id, data_inicio, data_fim, instrutor_id, local, sala_online, observacao, status = 'Em andamento', student_ids = [] } = req.body;
+    const {
+      curso_id,
+      data_inicio,
+      data_fim,
+      instrutor_id,
+      local,
+      sala_online,
+      observacao,
+      status = 'Em andamento',
+      student_ids = [],
+      student_modalities = [],
+      student_classifications = []
+    } = req.body;
     const localName = String(local || '').trim();
     const onlineRoomName = String(sala_online || '').trim();
 
@@ -345,7 +487,7 @@ classRoutes.post(
         status
       );
 
-      await syncClassStudents(db, result.lastID, student_ids);
+      await syncClassStudents(db, result.lastID, student_ids, student_modalities.length ? student_modalities : student_classifications);
       await db.exec('COMMIT');
 
       const turma = await db.get('SELECT * FROM turmas WHERE id = ?', result.lastID);
@@ -361,7 +503,7 @@ classRoutes.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const db = await getDb();
-    const { curso_id, data_inicio, data_fim, instrutor_id, local, sala_online, observacao, status, student_ids } = req.body;
+    const { curso_id, data_inicio, data_fim, instrutor_id, local, sala_online, observacao, status, student_ids, student_modalities = [], student_classifications = [] } = req.body;
     const localName = String(local || '').trim();
     const onlineRoomName = String(sala_online || '').trim();
 
@@ -387,7 +529,7 @@ classRoutes.put(
       );
 
       if (Array.isArray(student_ids)) {
-        await syncClassStudents(db, req.params.id, student_ids);
+        await syncClassStudents(db, req.params.id, student_ids, student_modalities.length ? student_modalities : student_classifications);
       }
 
       await db.exec('COMMIT');

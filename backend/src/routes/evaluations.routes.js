@@ -126,16 +126,23 @@ function buildEvaluationReportWhere(query) {
   };
 }
 
+const evaluationReportJoins = `
+       JOIN alunos a ON a.id = av.aluno_id
+       JOIN cursos c ON c.id = av.curso_id
+       JOIN instrutores i ON i.id = av.instrutor_id
+       JOIN turmas t ON t.id = av.turma_id`;
+
 evaluationRoutes.get(
   '/metrics',
   asyncHandler(async (req, res) => {
     const db = await getDb();
-    const { where, params } = buildWhere(req.query);
+    const { where, params } = buildEvaluationReportWhere(req.query);
 
     const overall = await db.get(
       `SELECT ROUND(AVG(av.nota_geral), 2) AS media_geral,
               COUNT(av.id) AS total_avaliacoes
        FROM avaliacoes av
+       ${evaluationReportJoins}
        ${where}`,
       params
     );
@@ -143,9 +150,9 @@ evaluationRoutes.get(
     const byCourse = await db.all(
       `SELECT c.id, c.nome, ROUND(AVG(av.nota_geral), 2) AS media, COUNT(av.id) AS total
        FROM avaliacoes av
-       JOIN cursos c ON c.id = av.curso_id
+       ${evaluationReportJoins}
        ${where}
-       GROUP BY c.id
+       GROUP BY c.id, c.nome
        ORDER BY media DESC, c.nome ASC`,
       params
     );
@@ -153,9 +160,9 @@ evaluationRoutes.get(
     const byInstructor = await db.all(
       `SELECT i.id, i.nome, ROUND(AVG(av.nota_geral), 2) AS media, COUNT(av.id) AS total
        FROM avaliacoes av
-       JOIN instrutores i ON i.id = av.instrutor_id
+       ${evaluationReportJoins}
        ${where}
-       GROUP BY i.id
+       GROUP BY i.id, i.nome
        ORDER BY media DESC, i.nome ASC`,
       params
     );
@@ -165,6 +172,7 @@ evaluationRoutes.get(
               ROUND(AVG(av.nota_geral), 2) AS media,
               COUNT(av.id) AS total
        FROM avaliacoes av
+       ${evaluationReportJoins}
        ${where}
        GROUP BY periodo
        ORDER BY periodo ASC`,
@@ -175,6 +183,7 @@ evaluationRoutes.get(
       `SELECT CAST(ROUND(av.nota_geral) AS SIGNED) AS nota,
               COUNT(av.id) AS total
        FROM avaliacoes av
+       ${evaluationReportJoins}
        ${where}
        GROUP BY nota
        ORDER BY nota ASC`,
@@ -185,6 +194,7 @@ evaluationRoutes.get(
       `SELECT av.teste_zoom AS status,
               COUNT(av.id) AS total
        FROM avaliacoes av
+       ${evaluationReportJoins}
        ${where}
        GROUP BY av.teste_zoom
        ORDER BY FIELD(av.teste_zoom, 'Sim', 'Não')`,
@@ -207,22 +217,69 @@ evaluationRoutes.get(
     const criteria = await db.get(
       `SELECT ${criteriaAverageSql}
        FROM avaliacoes av
+       ${evaluationReportJoins}
        ${where}`,
       params
     );
 
+    const responseClauses = ["rt.status LIKE 'Conclu%'"];
+    const responseParams = [];
+
+    if (req.query.courseId) {
+      responseClauses.push('rt.curso_id = ?');
+      responseParams.push(req.query.courseId);
+    }
+
+    if (req.query.instructorId) {
+      responseClauses.push('rt.instrutor_id = ?');
+      responseParams.push(req.query.instructorId);
+    }
+
+    if (req.query.classId) {
+      responseClauses.push('rt.id = ?');
+      responseParams.push(req.query.classId);
+    }
+
+    if (req.query.classStartFrom) {
+      responseClauses.push('DATE(rt.data_inicio) >= DATE(?)');
+      responseParams.push(req.query.classStartFrom);
+    }
+
+    if (req.query.classStartTo) {
+      responseClauses.push('DATE(rt.data_inicio) <= DATE(?)');
+      responseParams.push(req.query.classStartTo);
+    }
+
+    const hasEvaluationScopedResponseFilter = ['search', 'startDate', 'endDate', 'testZoom', 'hasComment', 'minScore', 'maxScore'].some((key) =>
+      Boolean(req.query[key])
+    );
+
+    if (hasEvaluationScopedResponseFilter) {
+      const correlatedWhere = where
+        ? where.replace(/^WHERE\s+/i, 'WHERE av.turma_id = rt.id AND ')
+        : 'WHERE av.turma_id = rt.id';
+      responseClauses.push(`EXISTS (
+        SELECT 1
+        FROM avaliacoes av
+        ${evaluationReportJoins}
+        ${correlatedWhere}
+      )`);
+      responseParams.push(...params);
+    }
+
     const responseRate = await db.all(
-      `SELECT t.id, c.nome AS curso_nome, t.data_inicio, t.data_fim,
+      `SELECT rt.id, rc.nome AS curso_nome, rt.data_inicio, rt.data_fim,
               COUNT(DISTINCT ta.aluno_id) AS total_alunos,
               COUNT(DISTINCT av.id) AS total_respostas,
               ROUND(COUNT(DISTINCT av.id) * 100.0 / NULLIF(COUNT(DISTINCT ta.aluno_id), 0), 2) AS taxa_resposta
-       FROM turmas t
-       JOIN cursos c ON c.id = t.curso_id
-       LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
-       LEFT JOIN avaliacoes av ON av.turma_id = t.id AND av.aluno_id = ta.aluno_id
-       WHERE t.status = 'Concluído'
-       GROUP BY t.id
-       ORDER BY DATE(t.data_fim) DESC`
+       FROM turmas rt
+       JOIN cursos rc ON rc.id = rt.curso_id
+       LEFT JOIN turma_alunos ta ON ta.turma_id = rt.id
+       LEFT JOIN avaliacoes av ON av.turma_id = rt.id AND av.aluno_id = ta.aluno_id
+       WHERE ${responseClauses.join(' AND ')}
+       GROUP BY rt.id, rc.nome, rt.data_inicio, rt.data_fim
+       ORDER BY DATE(rt.data_fim) DESC`,
+      responseParams
     );
 
     res.json({
@@ -404,11 +461,21 @@ evaluationRoutes.get(
     const db = await getDb();
     const evaluation = await db.get(
       `SELECT av.*, a.nome_completo AS aluno_nome, a.cpf,
-              c.nome AS curso_nome, i.nome AS instrutor_nome,
-              t.local, t.sala_online, t.data_inicio, t.data_fim
+              a.email AS aluno_email,
+              a.telefone AS aluno_telefone,
+              COALESCE(e.nome, a.empresa) AS empresa,
+              a.cidade,
+              a.estado,
+              c.nome AS curso_nome,
+              cc.nome AS classificacao_nome,
+              i.nome AS instrutor_nome,
+              t.local, t.sala_online, t.data_inicio, t.data_fim,
+              t.status AS turma_status
        FROM avaliacoes av
        JOIN alunos a ON a.id = av.aluno_id
+       LEFT JOIN empresas e ON e.id = a.empresa_id
        JOIN cursos c ON c.id = av.curso_id
+       JOIN classificacoes_cursos cc ON cc.id = c.classificacao_id
        JOIN instrutores i ON i.id = av.instrutor_id
        JOIN turmas t ON t.id = av.turma_id
        WHERE av.id = ?`,

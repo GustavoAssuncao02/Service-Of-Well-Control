@@ -1,11 +1,11 @@
-import { CheckCircle2, Download, Edit3, RotateCcw, Save, Search, Send, Trash2, X } from 'lucide-react';
+import { CheckCircle2, Download, Edit3, FileImage, RotateCcw, Save, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
 import { isDoneStatus } from '../utils/display.js';
-import { downloadClassReport } from '../utils/pdfReport.js';
+import { downloadClassReport, downloadClassReportPng } from '../utils/pdfReport.js';
 
 const initialCourseForm = { nome: '', classificacao_id: '', descricao: '' };
 const initialClassificationForm = { nome: '', descricao: '' };
@@ -20,7 +20,8 @@ const initialClassForm = {
   sala_online: '',
   observacao: '',
   status: 'Em andamento',
-  student_ids: []
+  student_ids: [],
+  student_classifications: {}
 };
 
 const tabs = [
@@ -49,6 +50,7 @@ export default function CoursesClasses() {
   const [instructors, setInstructors] = useState([]);
   const [locations, setLocations] = useState([]);
   const [onlineRooms, setOnlineRooms] = useState([]);
+  const [classModalities, setClassModalities] = useState([]);
   const [courseForm, setCourseForm] = useState(initialCourseForm);
   const [classificationForm, setClassificationForm] = useState(initialClassificationForm);
   const [locationForm, setLocationForm] = useState(initialLocationForm);
@@ -73,14 +75,24 @@ export default function CoursesClasses() {
   const evaluationLinkTimeout = useRef(null);
 
   async function loadAll() {
-    const [courseResponse, classificationResponse, classResponse, studentResponse, instructorResponse, locationResponse, onlineRoomResponse] = await Promise.all([
+    const [
+      courseResponse,
+      classificationResponse,
+      classResponse,
+      studentResponse,
+      instructorResponse,
+      locationResponse,
+      onlineRoomResponse,
+      classModalityResponse
+    ] = await Promise.all([
       api.get('/courses'),
       api.get('/course-classifications'),
       api.get('/classes'),
       api.get('/students'),
       api.get('/instructors'),
       api.get('/locations'),
-      api.get('/online-rooms')
+      api.get('/online-rooms'),
+      api.get('/class-modalities')
     ]);
 
     setCourses(courseResponse.data);
@@ -90,6 +102,7 @@ export default function CoursesClasses() {
     setInstructors(instructorResponse.data);
     setLocations(locationResponse.data);
     setOnlineRooms(onlineRoomResponse.data);
+    setClassModalities(classModalityResponse.data);
   }
 
   const filteredStudents = useMemo(() => {
@@ -206,7 +219,13 @@ export default function CoursesClasses() {
       ...classForm,
       curso_id: Number(classForm.curso_id),
       instrutor_id: Number(classForm.instrutor_id),
-      student_ids: classForm.student_ids.map(Number)
+      student_ids: classForm.student_ids.map(Number),
+      student_modalities: classForm.student_ids
+        .map((studentId) => ({
+          aluno_id: Number(studentId),
+          modalidade_aula_id: Number((classForm.student_classifications || {})[studentId] || getDefaultAttendanceClassificationId())
+        }))
+        .filter((item) => item.aluno_id && item.modalidade_aula_id)
     };
 
     try {
@@ -295,7 +314,12 @@ export default function CoursesClasses() {
         const { data } = await api.get(`/classes/${id}`);
         setEditingClass(data);
         setCurrentClassStudents(data.alunos);
-        setClassForm((current) => ({ ...current, status: data.status, student_ids: data.alunos.map((student) => String(student.id)) }));
+        setClassForm((current) => ({
+          ...current,
+          status: data.status,
+          student_ids: data.alunos.map((student) => String(student.id)),
+          student_classifications: buildStudentClassificationMap(data.alunos)
+        }));
       }
       await loadAll();
     } catch (err) {
@@ -342,12 +366,16 @@ export default function CoursesClasses() {
     }
   }
 
-  async function generateClassReport(turmaId) {
+  async function generateClassReport(turmaId, format = 'pdf') {
     setError('');
     setReportClassId(turmaId);
     try {
       const { data } = await api.get(`/classes/${turmaId}`);
-      downloadClassReport(data);
+      if (format === 'png') {
+        downloadClassReportPng(data);
+      } else {
+        downloadClassReport(data);
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -374,7 +402,12 @@ export default function CoursesClasses() {
       const { data } = await api.get(`/classes/${editingClass.id}`);
       setEditingClass(data);
       setCurrentClassStudents(data.alunos);
-      setClassForm((current) => ({ ...current, status: data.status, student_ids: data.alunos.map((student) => String(student.id)) }));
+      setClassForm((current) => ({
+        ...current,
+        status: data.status,
+        student_ids: data.alunos.map((student) => String(student.id)),
+        student_classifications: buildStudentClassificationMap(data.alunos)
+      }));
       await loadAll();
     } catch (err) {
       setError(getApiError(err));
@@ -420,17 +453,53 @@ export default function CoursesClasses() {
       sala_online: data.sala_online || '',
       observacao: data.observacao || '',
       status: data.status,
-      student_ids: data.alunos.map((student) => String(student.id))
+      student_ids: data.alunos.map((student) => String(student.id)),
+      student_classifications: buildStudentClassificationMap(data.alunos)
     });
+  }
+
+  function getDefaultAttendanceClassificationId() {
+    return String(classModalities.find((item) => item.nome === 'Presencial')?.id || classModalities[0]?.id || '');
+  }
+
+  function buildStudentClassificationMap(classStudents = []) {
+    return classStudents.reduce((acc, student) => {
+      acc[String(student.id)] = String(student.modalidade_aula_id || student.classificacao_presenca_id || getDefaultAttendanceClassificationId());
+      return acc;
+    }, {});
+  }
+
+  function selectedAttendanceClassification(studentId) {
+    const selectedId = (classForm.student_classifications || {})[String(studentId)] || getDefaultAttendanceClassificationId();
+    return classModalities.find((item) => String(item.id) === String(selectedId));
+  }
+
+  function setStudentAttendanceClassification(studentId, classificationId) {
+    setClassForm((current) => ({
+      ...current,
+      student_classifications: {
+        ...(current.student_classifications || {}),
+        [String(studentId)]: String(classificationId)
+      }
+    }));
   }
 
   function toggleStudent(studentId) {
     const id = String(studentId);
     setClassForm((current) => {
       const exists = current.student_ids.includes(id);
+      const nextClassifications = { ...(current.student_classifications || {}) };
+
+      if (exists) {
+        delete nextClassifications[id];
+      } else {
+        nextClassifications[id] = nextClassifications[id] || getDefaultAttendanceClassificationId();
+      }
+
       return {
         ...current,
-        student_ids: exists ? current.student_ids.filter((item) => item !== id) : [...current.student_ids, id]
+        student_ids: exists ? current.student_ids.filter((item) => item !== id) : [...current.student_ids, id],
+        student_classifications: nextClassifications
       };
     });
   }
@@ -862,15 +931,41 @@ export default function CoursesClasses() {
                 </Field>
                 {filteredStudents.length ? (
                   <div className="checkbox-grid">
-                    {filteredStudents.map((student) => (
-                      <label key={student.id} className="check-row">
-                        <input type="checkbox" checked={classForm.student_ids.includes(String(student.id))} onChange={() => toggleStudent(student.id)} />
-                        <span>
-                          <strong>{student.nome_completo}</strong>
-                          <small>{student.cpf} - cadastrado em {formatDate(student.criado_em?.slice(0, 10))}</small>
-                        </span>
-                      </label>
-                    ))}
+                    {filteredStudents.map((student) => {
+                      const selected = classForm.student_ids.includes(String(student.id));
+                      const selectedModality = selectedAttendanceClassification(student.id);
+
+                      return (
+                        <div key={student.id} className={`check-row student-assignment-card ${selected ? 'selected' : ''}`}>
+                          <label className="student-assignment-main">
+                            <input type="checkbox" checked={selected} onChange={() => toggleStudent(student.id)} />
+                            <span>
+                              <strong>{student.nome_completo}</strong>
+                              <small>{student.cpf} - cadastrado em {formatDate(student.criado_em?.slice(0, 10))}</small>
+                            </span>
+                          </label>
+                          {selected ? (
+                            <div className="student-assignment-controls">
+                              {selectedModality ? <span className="modality-pill">{selectedModality.nome}</span> : null}
+                              <select
+                                className="compact-select"
+                                value={(classForm.student_classifications || {})[String(student.id)] || getDefaultAttendanceClassificationId()}
+                                onChange={(event) => setStudentAttendanceClassification(student.id, event.target.value)}
+                                aria-label={`Modalidade de aula de ${student.nome_completo}`}
+                                required
+                              >
+                                <option value="">{classModalities.length ? 'Selecione' : 'Cadastre uma modalidade'}</option>
+                                {classModalities.map((modality) => (
+                                  <option key={modality.id} value={modality.id}>
+                                    {modality.nome}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <EmptyState title="Nenhum aluno encontrado" description="Revise o termo pesquisado." />
@@ -887,6 +982,7 @@ export default function CoursesClasses() {
                 <thead>
                   <tr>
                     <th>Aluno</th>
+                    <th>Modalidade</th>
                     <th>Status</th>
                     <th>Ação</th>
                   </tr>
@@ -901,6 +997,11 @@ export default function CoursesClasses() {
                       onKeyDown={(event) => handleRowKeyDown(event, () => navigate(`/admin/alunos/${student.id}`))}
                     >
                       <td>{student.nome_completo}</td>
+                      <td>
+                        <span className="modality-pill">
+                          {student.modalidade_aula_nome || student.classificacao_presenca_nome || '-'}
+                        </span>
+                      </td>
                       <td>
                         <span className={`status-badge ${isDoneStatus(student.status_turma) ? 'done' : 'active'}`}>{student.status_turma}</span>
                       </td>
@@ -1011,7 +1112,12 @@ export default function CoursesClasses() {
                       <strong>{turma.local || '-'}</strong>
                       {turma.sala_online ? <small>Sala online: {turma.sala_online}</small> : null}
                     </td>
-                    <td>{turma.total_alunos || 0}</td>
+                    <td>
+                      <strong>{turma.total_alunos || 0}</strong>
+                      <small>
+                        P: {turma.alunos_presenciais || 0} / O: {turma.alunos_online || 0}
+                      </small>
+                    </td>
                     <td>
                       <span className={`status-badge ${isDoneStatus(turma.status) ? 'done' : 'active'}`}>{turma.status}</span>
                     </td>
@@ -1027,6 +1133,18 @@ export default function CoursesClasses() {
                         aria-label="Gerar relatorio da turma em PDF"
                       >
                         <Download size={17} />
+                      </button>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          generateClassReport(turma.id, 'png');
+                        }}
+                        disabled={reportClassId === turma.id}
+                        aria-label="Gerar relatorio da turma em PNG"
+                      >
+                        <FileImage size={17} />
                       </button>
                       {!isDoneStatus(turma.status) ? (
                         <button

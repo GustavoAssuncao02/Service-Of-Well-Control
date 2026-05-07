@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Birthdays from './pages/Birthdays.jsx';
 import Calendar from './pages/Calendar.jsx';
 import ClassDetails from './pages/ClassDetails.jsx';
+import ClassModalities from './pages/ClassModalities.jsx';
 import ClassReport from './pages/ClassReport.jsx';
 import Companies from './pages/Companies.jsx';
 import CoursesClasses from './pages/CoursesClasses.jsx';
@@ -13,7 +14,7 @@ import DocumentBrowser from './pages/DocumentBrowser.jsx';
 import EvaluationControl from './pages/EvaluationControl.jsx';
 import EvaluationPublic from './pages/EvaluationPublic.jsx';
 import EvaluationReport from './pages/EvaluationReport.jsx';
-import EvaluationsDashboard from './pages/EvaluationsDashboard.jsx';
+import EvaluationReaction from './pages/EvaluationReaction.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import Instructors from './pages/Instructors.jsx';
 import Login from './pages/Login.jsx';
@@ -49,8 +50,10 @@ export default function App() {
           <Route path="documentos" element={<DocumentBrowser />} />
           <Route path="instrutores" element={<Instructors />} />
           <Route path="cursos-turmas" element={<CoursesClasses />} />
+          <Route path="modalidades-aula" element={<ClassModalities />} />
           <Route path="turmas/:id" element={<ClassDetails />} />
-          <Route path="avaliacoes" element={<EvaluationsDashboard />} />
+          <Route path="avaliacoes" element={<Navigate to="/admin/relatorio-avaliacoes" replace />} />
+          <Route path="avaliacoes/:id" element={<EvaluationReaction />} />
           <Route path="controle-avaliacoes" element={<EvaluationControl />} />
           <Route path="calendario" element={<Calendar />} />
           <Route path="aniversariantes" element={<Birthdays />} />

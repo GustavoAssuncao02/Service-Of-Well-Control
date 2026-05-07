@@ -1,4 +1,5 @@
 import { formatDate } from './date.js';
+import { downloadPdfCommandPagesAsPng } from './pngReport.js';
 
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
@@ -29,6 +30,9 @@ export const studentReportColumns = [
   { key: 'data_cadastro', label: 'Cadastro', getValue: (student) => formatDate(student.data_cadastro) },
   { key: 'data_atualizacao', label: 'Atualizacao', getValue: (student) => formatDate(student.data_atualizacao) },
   { key: 'total_turmas', label: 'Total turmas', getValue: (student) => student.total_turmas },
+  { key: 'modalidades_aula', label: 'Modalidades de aula', getValue: (student) => student.modalidades_aula || student.classificacoes_presenca },
+  { key: 'turmas_presenciais', label: 'Turmas presenciais', getValue: (student) => student.turmas_presenciais },
+  { key: 'turmas_online', label: 'Turmas online', getValue: (student) => student.turmas_online },
   { key: 'turmas_concluidas', label: 'Turmas concluidas', getValue: (student) => student.turmas_concluidas },
   { key: 'turmas_em_andamento', label: 'Turmas em andamento', getValue: (student) => student.turmas_em_andamento },
   { key: 'primeira_turma', label: 'Primeira turma', getValue: (student) => formatDate(student.primeira_turma) },
@@ -74,6 +78,17 @@ const pdfColumnGroups = [
       { key: 'funcao_descricao', width: 126 },
       { key: 'endereco_completo', width: 206 },
       { key: 'data_atualizacao', width: 78 }
+    ]
+  },
+  {
+    title: 'Modalidade em turmas',
+    columns: [
+      { key: 'nome_completo', width: 190 },
+      { key: 'total_turmas', width: 60 },
+      { key: 'turmas_presenciais', width: 60 },
+      { key: 'turmas_online', width: 60 },
+      { key: 'modalidades_aula', width: 190 },
+      { key: 'cursos', width: 218 }
     ]
   },
   {
@@ -196,7 +211,7 @@ function fileStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function downloadStudentsPdf(students, filtersSummary = '') {
+function buildStudentsPdfPages(students, filtersSummary = '') {
   const pages = [];
   let commands = [];
   let y = PAGE_HEIGHT - margin;
@@ -286,8 +301,18 @@ export function downloadStudentsPdf(students, filtersSummary = '') {
   });
 
   pushPage();
+  return pages;
+}
+
+export function downloadStudentsPdf(students, filtersSummary = '') {
+  const pages = buildStudentsPdfPages(students, filtersSummary);
   const pdf = buildPdf(pages);
   downloadBlob(new Blob([pdf], { type: 'application/pdf' }), `relatorio-alunos-${fileStamp()}.pdf`);
+}
+
+export function downloadStudentsPng(students, filtersSummary = '') {
+  const pages = buildStudentsPdfPages(students, filtersSummary);
+  downloadPdfCommandPagesAsPng(pages, `relatorio-alunos-${fileStamp()}.png`, { pageWidth: PAGE_WIDTH, pageHeight: PAGE_HEIGHT });
 }
 
 export function downloadStudentsExcel(students) {

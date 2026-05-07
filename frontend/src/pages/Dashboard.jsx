@@ -1,4 +1,4 @@
-import { Activity, BookOpenCheck, CheckCircle2, GraduationCap, TrendingUp, UserPlus, UsersRound } from 'lucide-react';
+import { Activity, BookOpenCheck, CheckCircle2, GraduationCap, Monitor, TrendingUp, UserPlus, UsersRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -8,6 +8,7 @@ import { formatDate } from '../utils/date.js';
 import { isDoneStatus } from '../utils/display.js';
 
 const sponsorColors = ['#3b82f6', '#f97316', '#16a34a', '#7c3aed'];
+const modalityColors = ['#f97316', '#3b82f6', '#16a34a', '#7c3aed', '#0f766e'];
 
 function StatCard({ icon: Icon, label, value, tone, hint }) {
   return (
@@ -38,6 +39,34 @@ function handleRowKeyDown(event, action) {
   }
 }
 
+function formatPercent(value) {
+  const percentage = Number(value || 0);
+  return `${percentage >= 10 ? percentage.toFixed(0) : percentage.toFixed(1)}%`;
+}
+
+function piePercentLabel({ percent }) {
+  const percentage = Number(percent || 0) * 100;
+  return percentage ? formatPercent(percentage) : '';
+}
+
+function StudentCountTooltip({ active, payload, total, nameKey }) {
+  if (!active || !payload?.length) return null;
+
+  const item = payload[0];
+  const row = item.payload || {};
+  const value = Number(item.value || 0);
+  const percentage = total ? (value * 100) / total : 0;
+  const name = row[nameKey] || item.name || 'Categoria';
+
+  return (
+    <div className="chart-tooltip">
+      <strong>{name}</strong>
+      <span>{formatPercent(percentage)}</span>
+      <small>{value} {value === 1 ? 'aluno' : 'alunos'}</small>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -60,6 +89,12 @@ export default function Dashboard() {
 
   const courseFrequency = data.courseFrequency?.length ? data.courseFrequency : data.courseDistribution;
   const topCourse = courseFrequency?.find((item) => Number(item.total || 0) > 0);
+  const sponsorDistribution = data.sponsorDistribution || [];
+  const sponsorTotal = sponsorDistribution.reduce((sum, item) => sum + Number(item.total || 0), 0) || 0;
+  const classModalityDistribution = data.classModalityDistribution || data.attendanceDistribution || [];
+  const modalityTotal = classModalityDistribution.reduce((sum, item) => sum + Number(item.total || 0), 0) || 0;
+  const onlineTotal = classModalityDistribution.find((item) => item.modalidade === 'Online')?.total || 0;
+  const presencialTotal = classModalityDistribution.find((item) => item.modalidade === 'Presencial')?.total || 0;
 
   return (
     <div className="page-stack">
@@ -78,6 +113,8 @@ export default function Dashboard() {
         <StatCard icon={TrendingUp} label="Alunos no ultimo mes" value={data.lastMonthStudents} tone="green" hint={variationLabel(data.lastMonthStudentVariation)} />
         <StatCard icon={Activity} label="Media de alunos por mes" value={data.averageStudentsPerMonth} tone="orange" />
         <StatCard icon={BookOpenCheck} label="Curso mais realizado" value={topCourse?.total || 0} tone="slate" hint={topCourse?.nome || 'Sem turmas'} />
+        <StatCard icon={UsersRound} label="Alunos presenciais" value={presencialTotal} tone="orange" hint={`${modalityTotal || 0} classificados`} />
+        <StatCard icon={Monitor} label="Alunos online" value={onlineTotal} tone="blue" hint={`${modalityTotal || 0} classificados`} />
       </section>
 
       <section className="dashboard-grid">
@@ -151,22 +188,47 @@ export default function Dashboard() {
           <div className="panel-heading">
             <h2>Empresa x Particular</h2>
           </div>
-          {data.sponsorDistribution?.length ? (
+          {sponsorDistribution.length ? (
             <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data.sponsorDistribution} dataKey="total" nameKey="tipo" innerRadius={64} outerRadius={108} paddingAngle={4} label>
-                    {data.sponsorDistribution.map((item, index) => (
+                  <Pie data={sponsorDistribution} dataKey="total" nameKey="tipo" innerRadius={64} outerRadius={108} paddingAngle={4} label={piePercentLabel}>
+                    {sponsorDistribution.map((item, index) => (
                       <Cell key={item.tipo} fill={sponsorColors[index % sponsorColors.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip content={<StudentCountTooltip total={sponsorTotal} nameKey="tipo" />} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           ) : (
             <EmptyState title="Sem distribuicao" description="Vincule alunos a turmas para comparar Empresa e Particular." />
+          )}
+        </article>
+      </section>
+
+      <section className="dashboard-grid single-panel-grid">
+        <article className="panel">
+          <div className="panel-heading">
+            <h2>Modalidades dos alunos</h2>
+          </div>
+          {classModalityDistribution.length ? (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={classModalityDistribution} dataKey="total" nameKey="modalidade" innerRadius={64} outerRadius={108} paddingAngle={4} label={piePercentLabel}>
+                    {classModalityDistribution.map((item, index) => (
+                      <Cell key={item.modalidade} fill={modalityColors[index % modalityColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<StudentCountTooltip total={modalityTotal} nameKey="modalidade" />} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Sem modalidades" description="Vincule alunos a turmas para comparar as modalidades." />
           )}
         </article>
       </section>

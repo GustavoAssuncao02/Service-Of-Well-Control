@@ -1,11 +1,11 @@
-import { ArrowLeft, CalendarDays, CheckCircle2, Download, GraduationCap, MapPin, Monitor, RotateCcw, Send, UsersRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, Download, FileImage, GraduationCap, MapPin, Monitor, RotateCcw, Send, UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
 import { isDoneStatus, isVisiblePlace, studentCountLabel } from '../utils/display.js';
-import { downloadClassReport } from '../utils/pdfReport.js';
+import { downloadClassReport, downloadClassReportPng } from '../utils/pdfReport.js';
 
 function InfoItem({ label, value, icon: Icon }) {
   return (
@@ -117,6 +117,9 @@ export default function ClassDetails() {
     return <div className="loading">Carregando informacoes da turma...</div>;
   }
 
+  const presencialCount = turma.alunos?.filter((student) => String(student.modalidade_aula_nome || '').startsWith('Presencial')).length || 0;
+  const onlineCount = turma.alunos?.filter((student) => String(student.modalidade_aula_nome || '').startsWith('Online')).length || 0;
+
   return (
     <div className="page-stack">
       <div className="detail-toolbar">
@@ -140,6 +143,10 @@ export default function ClassDetails() {
             <Download size={18} />
             Baixar PDF
           </button>
+          <button className="ghost-button" type="button" onClick={() => downloadClassReportPng(turma)}>
+            <FileImage size={16} />
+            Baixar PNG
+          </button>
         </div>
       </div>
 
@@ -160,6 +167,8 @@ export default function ClassDetails() {
           <InfoItem icon={CalendarDays} label="Periodo" value={`${formatDate(turma.data_inicio)} a ${formatDate(turma.data_fim)}`} />
           <InfoItem icon={GraduationCap} label="Instrutor" value={turma.instrutor_nome} />
           <InfoItem icon={UsersRound} label="Alunos" value={studentCountLabel(turma.alunos?.length || 0)} />
+          <InfoItem label="Presenciais" value={String(presencialCount)} />
+          <InfoItem label="Online" value={String(onlineCount)} />
           <InfoItem label="Classificacao" value={turma.classificacao_nome} />
           {isVisiblePlace(turma.local) ? <InfoItem icon={MapPin} label="Local" value={turma.local} /> : null}
           {isVisiblePlace(turma.sala_online) ? <InfoItem icon={Monitor} label="Sala virtual" value={turma.sala_online} /> : null}
@@ -193,10 +202,10 @@ export default function ClassDetails() {
               <thead>
                 <tr>
                   <th>Aluno</th>
-                  <th>CPF</th>
-                  <th>Contato</th>
                   <th>Empresa</th>
+                  <th>Modalidade</th>
                   <th>Status</th>
+                  <th>Avaliacao de reacao</th>
                   <th>Ação</th>
                 </tr>
               </thead>
@@ -210,14 +219,19 @@ export default function ClassDetails() {
                     onKeyDown={(event) => handleRowKeyDown(event, () => navigate(`/admin/alunos/${student.id}`))}
                   >
                     <td>{student.nome_completo}</td>
-                    <td>{student.cpf}</td>
-                    <td>
-                      <strong>{student.email}</strong>
-                      <small>{student.telefone}</small>
-                    </td>
                     <td>{student.empresa_nome || student.empresa || '-'}</td>
                     <td>
+                      <span className="modality-pill">
+                        {student.modalidade_aula_nome || student.classificacao_presenca_nome || '-'}
+                      </span>
+                    </td>
+                    <td>
                       <span className={`status-badge ${isDoneStatus(student.status_turma) ? 'done' : 'active'}`}>{student.status_turma}</span>
+                    </td>
+                    <td>
+                      <span className={`status-badge ${student.avaliacao_id ? 'done' : 'pending'}`}>
+                        {student.avaliacao_reacao_status || (student.avaliacao_id ? 'Respondeu' : 'Nao respondeu')}
+                      </span>
                     </td>
                     <td>
                       {isDoneStatus(student.status_turma) ? (

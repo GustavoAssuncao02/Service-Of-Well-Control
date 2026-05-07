@@ -328,6 +328,32 @@ function buildStudentReportWhere(query) {
     params.push(query.classStatus);
   }
 
+  const classModalityId = query.classModalityId || query.attendanceClassificationId;
+  if (classModalityId) {
+    where.push(
+      `EXISTS (
+        SELECT 1
+        FROM turma_alunos ta_presence
+        WHERE ta_presence.aluno_id = a.id
+          AND ta_presence.classificacao_presenca_id = ?
+      )`
+    );
+    params.push(classModalityId);
+  }
+
+  if (query.attendanceMode) {
+    where.push(
+      `EXISTS (
+        SELECT 1
+        FROM turma_alunos ta_presence
+        JOIN classificacoes_presenca cp_presence ON cp_presence.id = ta_presence.classificacao_presenca_id
+        WHERE ta_presence.aluno_id = a.id
+          AND cp_presence.nome = ?
+      )`
+    );
+    params.push(query.attendanceMode);
+  }
+
   if (query.hasClasses === 'yes') {
     where.push('COALESCE(class_stats.total_turmas, 0) > 0');
   } else if (query.hasClasses === 'no') {
@@ -487,7 +513,7 @@ studentRoutes.get(
   '/report-options',
   asyncHandler(async (req, res) => {
     const db = await getDb();
-    const [cityRows, stateRows] = await Promise.all([
+    const [cityRows, stateRows, attendanceClassificationRows] = await Promise.all([
       db.all(
         `SELECT DISTINCT TRIM(cidade) AS value
          FROM alunos
@@ -499,12 +525,19 @@ studentRoutes.get(
          FROM alunos
          WHERE estado IS NOT NULL AND TRIM(estado) <> ''
          ORDER BY value ASC`
+      ),
+      db.all(
+        `SELECT id, nome, descricao
+         FROM classificacoes_presenca
+         ORDER BY nome ASC`
       )
     ]);
 
     res.json({
       cities: cityRows.map((row) => row.value),
-      states: stateRows.map((row) => row.value)
+      states: stateRows.map((row) => row.value),
+      classModalities: attendanceClassificationRows,
+      attendanceClassifications: attendanceClassificationRows
     });
   })
 );
@@ -548,22 +581,31 @@ studentRoutes.get(
               class_stats.primeira_turma,
               class_stats.ultima_turma,
               class_stats.cursos,
+              class_stats.modalidades_aula,
+              class_stats.classificacoes_presenca,
+              COALESCE(class_stats.turmas_presenciais, 0) AS turmas_presenciais,
+              COALESCE(class_stats.turmas_online, 0) AS turmas_online,
               COALESCE(doc_stats.total_documentos, 0) AS total_documentos
        FROM alunos a
        LEFT JOIN empresas e ON e.id = a.empresa_id
        LEFT JOIN (
          SELECT ta.aluno_id,
                 COUNT(DISTINCT ta.turma_id) AS total_turmas,
-                SUM(CASE WHEN ta.status = 'ConcluÃ­do' THEN 1 ELSE 0 END) AS turmas_concluidas,
+                SUM(CASE WHEN ta.status LIKE 'Conclu%' THEN 1 ELSE 0 END) AS turmas_concluidas,
                 SUM(CASE WHEN ta.status = 'Em andamento' THEN 1 ELSE 0 END) AS turmas_em_andamento,
                 MIN(t.data_inicio) AS primeira_turma,
                 MAX(t.data_fim) AS ultima_turma,
-                GROUP_CONCAT(DISTINCT c.nome ORDER BY c.nome SEPARATOR ', ') AS cursos
-         FROM turma_alunos ta
-         JOIN turmas t ON t.id = ta.turma_id
-         JOIN cursos c ON c.id = t.curso_id
-         GROUP BY ta.aluno_id
-       ) class_stats ON class_stats.aluno_id = a.id
+                 GROUP_CONCAT(DISTINCT c.nome ORDER BY c.nome SEPARATOR ', ') AS cursos,
+                 GROUP_CONCAT(DISTINCT cp.nome ORDER BY cp.nome SEPARATOR ', ') AS modalidades_aula,
+                 GROUP_CONCAT(DISTINCT cp.nome ORDER BY cp.nome SEPARATOR ', ') AS classificacoes_presenca,
+                 COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Presencial%' THEN ta.turma_id END) AS turmas_presenciais,
+                 COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Online%' THEN ta.turma_id END) AS turmas_online
+          FROM turma_alunos ta
+          JOIN turmas t ON t.id = ta.turma_id
+          JOIN cursos c ON c.id = t.curso_id
+          JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+          GROUP BY ta.aluno_id
+        ) class_stats ON class_stats.aluno_id = a.id
        LEFT JOIN (
          SELECT aluno_id, COUNT(*) AS total_documentos
          FROM aluno_documentos
@@ -673,16 +715,21 @@ studentRoutes.get(
       students = await db.all(
         `SELECT a.id, a.nome_completo, a.cpf, a.email, a.telefone,
                 ta.status AS status_turma,
+                ta.classificacao_presenca_id AS modalidade_aula_id,
+                cp.nome AS modalidade_aula_nome,
+                ta.classificacao_presenca_id,
+                cp.nome AS classificacao_presenca_nome,
                 COUNT(DISTINCT all_docs.id) AS total_documentos,
                 COUNT(DISTINCT class_docs.id) AS total_documentos_turma
          FROM turma_alunos ta
          JOIN alunos a ON a.id = ta.aluno_id
+         JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
          LEFT JOIN aluno_documentos all_docs ON all_docs.aluno_id = a.id
          LEFT JOIN aluno_documentos class_docs
            ON class_docs.aluno_id = a.id
           AND class_docs.turma_id = ta.turma_id
          WHERE ta.turma_id = ?
-         GROUP BY a.id, ta.status
+         GROUP BY a.id, ta.status, ta.classificacao_presenca_id, cp.nome
          ORDER BY a.nome_completo ASC`,
         selectedClassId
       );
@@ -757,11 +804,16 @@ studentRoutes.get(
     const classes = await db.all(
       `SELECT t.id, t.data_inicio, t.data_fim, t.local, t.sala_online, t.status AS turma_status,
               c.nome AS curso_nome, i.nome AS instrutor_nome,
-              ta.status AS status_turma, ta.matriculado_em, ta.concluido_em
+              ta.status AS status_turma, ta.matriculado_em, ta.concluido_em,
+              ta.classificacao_presenca_id AS modalidade_aula_id,
+              cp.nome AS modalidade_aula_nome,
+              ta.classificacao_presenca_id,
+              cp.nome AS classificacao_presenca_nome
        FROM turma_alunos ta
        JOIN turmas t ON t.id = ta.turma_id
        JOIN cursos c ON c.id = t.curso_id
        JOIN instrutores i ON i.id = t.instrutor_id
+       JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
        WHERE ta.aluno_id = ?
        ORDER BY DATE(t.data_inicio) DESC`,
       req.params.id

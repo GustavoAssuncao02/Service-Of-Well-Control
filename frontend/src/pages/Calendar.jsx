@@ -1,11 +1,11 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileImage } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
 import { currentMonthIso, formatDate } from '../utils/date.js';
 import { isDoneStatus, isVisiblePlace, studentCountLabel } from '../utils/display.js';
-import { downloadDayClassesReport } from '../utils/pdfReport.js';
+import { downloadDayClassesReport, downloadDayClassesReportPng } from '../utils/pdfReport.js';
 
 const eventPalette = [
   { bg: '#e8f3ff', color: '#1d4f8f', border: '#b9d8fb' },
@@ -58,6 +58,24 @@ function studentIdsFromClass(turma) {
     .filter(Boolean);
 }
 
+function presencialStudentIdsFromClass(turma) {
+  return String(turma.aluno_ids_presenciais || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+function onlineStudentIdsFromClass(turma) {
+  return String(turma.aluno_ids_online || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+function attendanceCountLabel(presencial, online) {
+  return `Presencial: ${Number(presencial || 0)} Online: ${Number(online || 0)}`;
+}
+
 function roomLabel(room) {
   const label = String(room || '').trim() || 'Sem sala';
   return label.toLowerCase().startsWith('sala') ? label : `Sala ${label}`;
@@ -78,12 +96,18 @@ function groupClassesByRoom(classes) {
         cursos: new Set(),
         classes: [],
         studentIds: new Set(),
-        totalFallback: 0
+        presencialStudentIds: new Set(),
+        onlineStudentIds: new Set(),
+        totalFallback: 0,
+        presencialFallback: 0,
+        onlineFallback: 0
       });
     }
 
     const group = groups.get(key);
     const studentIds = studentIdsFromClass(turma);
+    const presencialStudentIds = presencialStudentIdsFromClass(turma);
+    const onlineStudentIds = onlineStudentIdsFromClass(turma);
 
     group.classes.push(turma);
     if (isVisiblePlace(turma.local)) group.locais.add(turma.local);
@@ -93,6 +117,18 @@ function groupClassesByRoom(classes) {
       studentIds.forEach((studentId) => group.studentIds.add(studentId));
     } else {
       group.totalFallback += Number(turma.total_alunos || 0);
+    }
+
+    if (presencialStudentIds.length) {
+      presencialStudentIds.forEach((studentId) => group.presencialStudentIds.add(studentId));
+    } else {
+      group.presencialFallback += Number(turma.alunos_presenciais || 0);
+    }
+
+    if (onlineStudentIds.length) {
+      onlineStudentIds.forEach((studentId) => group.onlineStudentIds.add(studentId));
+    } else {
+      group.onlineFallback += Number(turma.alunos_online || 0);
     }
   });
 
@@ -104,6 +140,8 @@ function groupClassesByRoom(classes) {
       cursos: Array.from(group.cursos),
       classes: group.classes,
       total_alunos: group.studentIds.size || group.totalFallback,
+      alunos_presenciais: group.presencialStudentIds.size || group.presencialFallback,
+      alunos_online: group.onlineStudentIds.size || group.onlineFallback,
       done: group.classes.length > 0 && group.classes.every((turma) => isDoneStatus(turma.status))
     }))
     .sort((first, second) => first.sala_online.localeCompare(second.sala_online, 'pt-BR', { numeric: true }));
@@ -197,7 +235,7 @@ export default function Calendar() {
     return calendarDays.find((day) => day.iso === selectedDayIso) || null;
   }, [calendarDays, selectedDayIso]);
 
-  async function generateDayReport() {
+  async function generateDayReport(format = 'pdf') {
     if (!selectedDay) return;
 
     setError('');
@@ -209,7 +247,11 @@ export default function Calendar() {
           return data;
         })
       );
-      downloadDayClassesReport(selectedDay.iso, detailedClasses);
+      if (format === 'png') {
+        downloadDayClassesReportPng(selectedDay.iso, detailedClasses);
+      } else {
+        downloadDayClassesReport(selectedDay.iso, detailedClasses);
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -217,11 +259,25 @@ export default function Calendar() {
     }
   }
 
-  const selectedDayStudentTotal = selectedDay
+  const selectedDayStudentSummary = selectedDay
     ? calendarView === 'rooms'
-      ? selectedDay.rooms.reduce((total, room) => total + Number(room.total_alunos || 0), 0)
-      : selectedDay.classes.reduce((total, turma) => total + Number(turma.total_alunos || 0), 0)
-    : 0;
+      ? selectedDay.rooms.reduce(
+          (summary, room) => ({
+            total: summary.total + Number(room.total_alunos || 0),
+            presencial: summary.presencial + Number(room.alunos_presenciais || 0),
+            online: summary.online + Number(room.alunos_online || 0)
+          }),
+          { total: 0, presencial: 0, online: 0 }
+        )
+      : selectedDay.classes.reduce(
+          (summary, turma) => ({
+            total: summary.total + Number(turma.total_alunos || 0),
+            presencial: summary.presencial + Number(turma.alunos_presenciais || 0),
+            online: summary.online + Number(turma.alunos_online || 0)
+          }),
+          { total: 0, presencial: 0, online: 0 }
+        )
+    : { total: 0, presencial: 0, online: 0 };
 
   return (
     <div className="page-stack">
@@ -264,7 +320,10 @@ export default function Calendar() {
         <section className="panel selected-day-panel">
           <div>
             <strong>{formatDate(selectedDay.iso)}</strong>
-            <span>{selectedDay.classes.length ? studentCountLabel(selectedDayStudentTotal) : 'Sem alunos'}</span>
+            <span>{selectedDay.classes.length ? studentCountLabel(selectedDayStudentSummary.total) : 'Sem alunos'}</span>
+            {selectedDay.classes.length ? (
+              <small className="attendance-summary">{attendanceCountLabel(selectedDayStudentSummary.presencial, selectedDayStudentSummary.online)}</small>
+            ) : null}
           </div>
           <div className="selected-day-summary">
             {selectedDay.classes.length ? (
@@ -285,10 +344,16 @@ export default function Calendar() {
               <span>Sem cursos nessa data.</span>
             )}
           </div>
-          <button className="primary-button" type="button" onClick={generateDayReport} disabled={reportLoading || !selectedDay.classes.length}>
-            <Download size={18} />
-            {reportLoading ? 'Gerando...' : 'Baixar relatório do dia'}
-          </button>
+          <div className="inline-actions">
+            <button className="primary-button" type="button" onClick={() => generateDayReport('pdf')} disabled={reportLoading || !selectedDay.classes.length}>
+              <Download size={18} />
+              {reportLoading ? 'Gerando...' : 'PDF'}
+            </button>
+            <button className="ghost-button" type="button" onClick={() => generateDayReport('png')} disabled={reportLoading || !selectedDay.classes.length}>
+              <FileImage size={16} />
+              PNG
+            </button>
+          </div>
         </section>
       ) : null}
 
@@ -328,6 +393,7 @@ export default function Calendar() {
                           <small key={local}>{local}</small>
                         ))}
                         <small>{studentCountLabel(room.total_alunos)}</small>
+                        <small>{attendanceCountLabel(room.alunos_presenciais, room.alunos_online)}</small>
                         {room.done ? <small className="calendar-event-status">Concluido!</small> : null}
                       </button>
                     ))
@@ -346,6 +412,7 @@ export default function Calendar() {
                       <CalendarDays size={14} />
                       <span>{turma.curso_nome}</span>
                       <small>{studentCountLabel(turma.total_alunos)}</small>
+                      <small>{attendanceCountLabel(turma.alunos_presenciais, turma.alunos_online)}</small>
                       {isVisiblePlace(turma.local) ? <small>Local: {turma.local}</small> : null}
                       {isVisiblePlace(turma.sala_online) ? <small>Sala virtual: {turma.sala_online}</small> : null}
                       {isDoneStatus(turma.status) ? <small className="calendar-event-status">Concluido!</small> : null}

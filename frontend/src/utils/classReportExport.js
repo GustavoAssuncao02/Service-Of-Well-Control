@@ -1,4 +1,5 @@
 import { formatDate } from './date.js';
+import { downloadPdfCommandPagesAsPng } from './pngReport.js';
 
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
@@ -29,6 +30,9 @@ export const classReportColumns = [
   { key: 'data_cadastro', label: 'Cadastro', getValue: (turma) => formatDate(turma.data_cadastro) },
   { key: 'data_atualizacao', label: 'Atualizacao', getValue: (turma) => formatDate(turma.data_atualizacao) },
   { key: 'total_alunos', label: 'Total alunos', getValue: (turma) => turma.total_alunos },
+  { key: 'modalidades_aula', label: 'Modalidades de aula', getValue: (turma) => turma.modalidades_aula || turma.classificacoes_presenca },
+  { key: 'alunos_presenciais', label: 'Alunos presenciais', getValue: (turma) => turma.alunos_presenciais },
+  { key: 'alunos_online', label: 'Alunos online', getValue: (turma) => turma.alunos_online },
   { key: 'alunos_concluidos', label: 'Alunos concluidos', getValue: (turma) => turma.alunos_concluidos },
   { key: 'alunos_em_andamento', label: 'Alunos em andamento', getValue: (turma) => turma.alunos_em_andamento },
   { key: 'avaliacoes_recebidas', label: 'Avaliacoes recebidas', getValue: (turma) => turma.avaliacoes_recebidas },
@@ -39,45 +43,17 @@ export const classReportColumns = [
   { key: 'maior_nota', label: 'Maior nota', getValue: (turma) => (turma.maior_nota === null ? '-' : formatNumber(turma.maior_nota, 2)) }
 ];
 
-const pdfColumnGroups = [
-  {
-    title: 'Identificacao',
-    columns: [
-      { key: 'id', width: 34 },
-      { key: 'curso_nome', width: 190 },
-      { key: 'classificacao_nome', width: 110 },
-      { key: 'instrutor_nome', width: 126 },
-      { key: 'data_inicio', width: 70 },
-      { key: 'data_fim', width: 70 },
-      { key: 'status', width: 82 },
-      { key: 'data_cadastro', width: 70 }
-    ]
-  },
-  {
-    title: 'Estrutura',
-    columns: [
-      { key: 'curso_nome', width: 190 },
-      { key: 'instrutor_nome', width: 128 },
-      { key: 'local', width: 132 },
-      { key: 'sala_online', width: 132 },
-      { key: 'observacao', width: 196 }
-    ]
-  },
-  {
-    title: 'Participacao e avaliacoes',
-    columns: [
-      { key: 'curso_nome', width: 172 },
-      { key: 'total_alunos', width: 62 },
-      { key: 'alunos_concluidos', width: 72 },
-      { key: 'alunos_em_andamento', width: 82 },
-      { key: 'avaliacoes_recebidas', width: 78 },
-      { key: 'avaliacoes_pendentes', width: 78 },
-      { key: 'taxa_resposta', width: 72 },
-      { key: 'media_geral', width: 62 },
-      { key: 'menor_nota', width: 56 },
-      { key: 'maior_nota', width: 56 }
-    ]
-  }
+const pdfColumns = [
+  { key: 'id', width: 30 },
+  { key: 'curso_nome', width: 158 },
+  { key: 'classificacao_nome', width: 92 },
+  { key: 'instrutor_nome', width: 108 },
+  { key: 'data_inicio', width: 62 },
+  { key: 'data_fim', width: 62 },
+  { key: 'status', width: 78 },
+  { key: 'total_alunos', label: 'Alunos', width: 52 },
+  { key: 'alunos_presenciais', label: 'Presenciais', width: 68 },
+  { key: 'alunos_online', label: 'Online', width: 58 }
 ];
 
 function plainText(value) {
@@ -184,12 +160,16 @@ function fileStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function downloadClassesPdf(classes, filtersSummary = '') {
+function buildClassesPdfPages(classes, filtersSummary = '') {
   const pages = [];
   let commands = [];
   let y = PAGE_HEIGHT - margin;
   const rowHeight = 20;
   const headerHeight = 22;
+  const columns = pdfColumns.map(getColumnDefinition);
+  const totalStudents = classes.reduce((sum, turma) => sum + Number(turma.total_alunos || 0), 0);
+  const presencialStudents = classes.reduce((sum, turma) => sum + Number(turma.alunos_presenciais || 0), 0);
+  const onlineStudents = classes.reduce((sum, turma) => sum + Number(turma.alunos_online || 0), 0);
 
   function addText(text, x, textY, options = {}) {
     const { size = 7, bold = false } = options;
@@ -211,13 +191,15 @@ export function downloadClassesPdf(classes, filtersSummary = '') {
     }
   }
 
-  function startPage(group, continued = false) {
+  function startPage(continued = false) {
     pushPage();
     commands = [];
     y = PAGE_HEIGHT - margin;
     addText(continued ? 'Relatorio de turmas - continuacao' : 'Relatorio de turmas', margin, y, { size: 16, bold: true });
-    addText(`Bloco: ${group.title}`, margin + 300, y, { size: 9, bold: true });
-    addText(`Total: ${classes.length}`, margin + 640, y, { size: 9 });
+    addText(`Turmas: ${classes.length}`, margin + 430, y, { size: 9, bold: true });
+    addText(`Alunos: ${totalStudents}`, margin + 530, y, { size: 9, bold: true });
+    addText(`Presenciais: ${presencialStudents}`, margin + 610, y, { size: 9, bold: true });
+    addText(`Online: ${onlineStudents}`, margin + 710, y, { size: 9, bold: true });
     y -= 18;
     if (filtersSummary) {
       addText(`Filtros: ${filtersSummary}`, margin, y, { size: 7 });
@@ -239,9 +221,9 @@ export function downloadClassesPdf(classes, filtersSummary = '') {
     y = headerY;
   }
 
-  function addRow(turma, index, columns, group) {
+  function addRow(turma, index, columns) {
     if (y - rowHeight < margin + 12) {
-      startPage(group, true);
+      startPage(true);
       addHeader(columns);
     }
 
@@ -259,23 +241,30 @@ export function downloadClassesPdf(classes, filtersSummary = '') {
     y = rowY;
   }
 
-  pdfColumnGroups.forEach((group) => {
-    const columns = group.columns.map(getColumnDefinition);
-    startPage(group, false);
-    addHeader(columns);
+  startPage(false);
+  addHeader(columns);
 
-    if (classes.length) {
-      classes.forEach((turma, index) => addRow(turma, index, columns, group));
-    } else {
-      y -= rowHeight;
-      strokeRect(margin, y, contentWidth, rowHeight);
-      addText('Nenhuma turma encontrada para os filtros selecionados.', margin + 6, y + 8, { size: 7 });
-    }
-  });
+  if (classes.length) {
+    classes.forEach((turma, index) => addRow(turma, index, columns));
+  } else {
+    y -= rowHeight;
+    strokeRect(margin, y, contentWidth, rowHeight);
+    addText('Nenhuma turma encontrada para os filtros selecionados.', margin + 6, y + 8, { size: 7 });
+  }
 
   pushPage();
+  return pages;
+}
+
+export function downloadClassesPdf(classes, filtersSummary = '') {
+  const pages = buildClassesPdfPages(classes, filtersSummary);
   const pdf = buildPdf(pages);
   downloadBlob(new Blob([pdf], { type: 'application/pdf' }), `relatorio-turmas-${fileStamp()}.pdf`);
+}
+
+export function downloadClassesPng(classes, filtersSummary = '') {
+  const pages = buildClassesPdfPages(classes, filtersSummary);
+  downloadPdfCommandPagesAsPng(pages, `relatorio-turmas-${fileStamp()}.png`, { pageWidth: PAGE_WIDTH, pageHeight: PAGE_HEIGHT });
 }
 
 export function downloadClassesExcel(classes) {

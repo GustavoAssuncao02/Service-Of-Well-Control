@@ -518,6 +518,7 @@ export default function StudentDetails() {
                   <th>Instrutor</th>
                   <th>Periodo</th>
                   <th>Local</th>
+                  <th>Modalidade</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -538,6 +539,11 @@ export default function StudentDetails() {
                     <td>
                       {isVisiblePlace(turma.local) ? <strong>{turma.local}</strong> : '-'}
                       {isVisiblePlace(turma.sala_online) ? <small>Sala online: {turma.sala_online}</small> : null}
+                    </td>
+                    <td>
+                      <span className="modality-pill">
+                        {turma.modalidade_aula_nome || turma.classificacao_presenca_nome || '-'}
+                      </span>
                     </td>
                     <td>
                       <span className={`status-badge ${isDoneStatus(turma.status_turma) ? 'done' : 'active'}`}>{turma.status_turma}</span>

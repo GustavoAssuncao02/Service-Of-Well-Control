@@ -10,10 +10,10 @@ import {
   History,
   LayoutDashboard,
   LogOut,
+  Monitor,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Star,
   Users,
   UserCheck,
   UserCog,
@@ -22,6 +22,8 @@ import {
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import AccessRequestsLoginToast from './AccessRequestsLoginToast.jsx';
+import BirthdayLoginToast from './BirthdayLoginToast.jsx';
 import SwcLogo from './SwcLogo.jsx';
 
 const navItems = [
@@ -32,7 +34,7 @@ const navItems = [
   { to: '/admin/documentos', label: 'Consultar documentos', icon: FileSearch },
   { to: '/admin/instrutores', label: 'Instrutores', icon: GraduationCap },
   { to: '/admin/cursos-turmas', label: 'Cursos e turmas', icon: BookOpen },
-  { to: '/admin/avaliacoes', label: 'Avaliações', icon: Star },
+  { to: '/admin/modalidades-aula', label: 'Modalidades de aula', icon: Monitor },
   { to: '/admin/controle-avaliacoes', label: 'Controle', icon: ClipboardCheck },
   { to: '/admin/aniversariantes', label: 'Aniversariantes', icon: Cake },
   { to: '/admin/historico', label: 'Histórico', icon: History },
@@ -110,6 +112,10 @@ export default function Layout() {
         <main className="content">
           <Outlet />
         </main>
+        <div className="login-toast-stack">
+          <AccessRequestsLoginToast />
+          <BirthdayLoginToast />
+        </div>
       </div>
     </div>
   );

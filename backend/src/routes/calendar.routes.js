@@ -34,7 +34,11 @@ calendarRoutes.get(
               t.sala_online,
               c.nome AS curso_nome, i.nome AS instrutor_nome,
               COALESCE(alunos.total_alunos, 0) AS total_alunos,
-              alunos.aluno_ids
+              COALESCE(alunos.alunos_presenciais, 0) AS alunos_presenciais,
+              COALESCE(alunos.alunos_online, 0) AS alunos_online,
+              alunos.aluno_ids,
+              alunos.aluno_ids_presenciais,
+              alunos.aluno_ids_online
        FROM turmas t
        JOIN cursos c ON c.id = t.curso_id
        JOIN instrutores i ON i.id = t.instrutor_id
@@ -43,11 +47,16 @@ calendarRoutes.get(
         AND local_por_id.id = CAST(TRIM(t.local) AS UNSIGNED)
        LEFT JOIN locais local_por_nome ON local_por_nome.nome = t.local
        LEFT JOIN (
-         SELECT turma_id,
+         SELECT ta.turma_id,
                 COUNT(*) AS total_alunos,
-                GROUP_CONCAT(DISTINCT aluno_id ORDER BY aluno_id) AS aluno_ids
-         FROM turma_alunos
-         GROUP BY turma_id
+                COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Presencial%' THEN ta.aluno_id END) AS alunos_presenciais,
+                COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Online%' THEN ta.aluno_id END) AS alunos_online,
+                GROUP_CONCAT(DISTINCT ta.aluno_id ORDER BY ta.aluno_id) AS aluno_ids,
+                GROUP_CONCAT(DISTINCT CASE WHEN cp.nome LIKE 'Presencial%' THEN ta.aluno_id END ORDER BY ta.aluno_id) AS aluno_ids_presenciais,
+                GROUP_CONCAT(DISTINCT CASE WHEN cp.nome LIKE 'Online%' THEN ta.aluno_id END ORDER BY ta.aluno_id) AS aluno_ids_online
+         FROM turma_alunos ta
+         LEFT JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+         GROUP BY ta.turma_id
        ) alunos ON alunos.turma_id = t.id
        WHERE DATE(t.data_inicio) <= DATE(?) AND DATE(t.data_fim) >= DATE(?)
        ORDER BY DATE(t.data_inicio) ASC`,

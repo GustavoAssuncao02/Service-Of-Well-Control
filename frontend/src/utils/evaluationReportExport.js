@@ -1,4 +1,5 @@
 import { formatDate } from './date.js';
+import { downloadPdfCommandPagesAsPng } from './pngReport.js';
 
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
@@ -235,7 +236,7 @@ function fileStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function downloadEvaluationsPdf(evaluations, summary, filtersSummary = '') {
+function buildEvaluationsPdfPages(evaluations, summary, filtersSummary = '') {
   const pages = [];
   let commands = [];
   let y = PAGE_HEIGHT - margin;
@@ -324,8 +325,18 @@ export function downloadEvaluationsPdf(evaluations, summary, filtersSummary = ''
   });
 
   pushPage();
+  return pages;
+}
+
+export function downloadEvaluationsPdf(evaluations, summary, filtersSummary = '') {
+  const pages = buildEvaluationsPdfPages(evaluations, summary, filtersSummary);
   const pdf = buildPdf(pages);
   downloadBlob(new Blob([pdf], { type: 'application/pdf' }), `relatorio-avaliacoes-${fileStamp()}.pdf`);
+}
+
+export function downloadEvaluationsPng(evaluations, summary, filtersSummary = '') {
+  const pages = buildEvaluationsPdfPages(evaluations, summary, filtersSummary);
+  downloadPdfCommandPagesAsPng(pages, `relatorio-avaliacoes-${fileStamp()}.png`, { pageWidth: PAGE_WIDTH, pageHeight: PAGE_HEIGHT });
 }
 
 export function downloadEvaluationsExcel(evaluations) {

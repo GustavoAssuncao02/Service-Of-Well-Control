@@ -1,0 +1,162 @@
+﻿flowchart TD
+  A["Entrada no site"] --> B["/cadastro"]
+  A --> C["/login"]
+  A --> D["/solicitar-acesso"]
+  A --> E["/avaliacao"]
+  A --> F["/avaliacao/:turmaId"]
+  A --> G["/"]
+
+  G --> B
+
+  B --> B1["Consultar CPF"]
+  B1 --> B2["Completar cadastro"]
+  B2 --> C
+
+  D --> D1["Solicitar acesso administrativo"]
+  D1 --> C
+
+  E --> E1["Validar CPF"]
+  F --> E1
+  E1 --> E2["Responder avaliacao de reacao"]
+  E2 --> E3["Enviar avaliacao"]
+
+  C --> C1{"Login aprovado?"}
+  C1 -->|Aluno| H["/aluno"]
+  C1 -->|Admin| I["/admin"]
+  C1 -->|Nao| C
+
+  H --> H1["Ver area do aluno"]
+  H --> H2["Sair"]
+  H2 --> C
+
+  I --> J["Calendario"]
+  I --> K["Dashboard"]
+  I --> L["Perfil"]
+  I --> M["Cadastros"]
+  I --> N["Turmas"]
+  I --> O["Avaliacoes"]
+  I --> P["Relatorios"]
+  I --> Q["Administracao"]
+
+  J --> J1["Visualizar turmas por mes"]
+  J --> J2["Ver totais: alunos, presencial e online"]
+  J --> J3["Abrir turma"]
+  J3 --> N1["/admin/turmas/:id"]
+
+  K --> K1["Ver indicadores"]
+  K --> K2["Ver graficos"]
+  K --> K3["Abrir turma"]
+  K3 --> N1
+
+  L --> L1["Editar perfil"]
+  L --> L2["Alterar senha"]
+
+  M --> M1["/admin/empresas"]
+  M --> M2["/admin/alunos"]
+  M --> M3["/admin/documentos"]
+  M --> M4["/admin/instrutores"]
+  M --> M5["/admin/cursos-turmas"]
+  M --> M6["/admin/modalidades-aula"]
+
+  M1 --> M1A["Criar, editar e excluir empresas"]
+  M2 --> M2A["Criar, editar e excluir alunos"]
+  M2 --> M2B["Abrir perfil do aluno"]
+  M2B --> M2C["/admin/alunos/:id"]
+  M3 --> M3A["Consultar documentos"]
+  M3 --> M3B["Abrir perfil do aluno"]
+  M3B --> M2C
+  M4 --> M4A["Criar, editar e excluir instrutores"]
+  M5 --> M5A["Gerenciar cursos"]
+  M5 --> M5B["Gerenciar classificacoes"]
+  M5 --> M5C["Gerenciar locais"]
+  M5 --> M5D["Gerenciar salas online"]
+  M5 --> M5E["Criar, editar e excluir turmas"]
+  M5 --> M5F["Concluir e reabrir turmas"]
+  M5 --> M5G["Concluir e reabrir alunos da turma"]
+  M5E --> N1
+  M6 --> M6A["Criar, editar e excluir modalidades de aula"]
+
+  M2C --> M2D["Editar dados do aluno"]
+  M2C --> M2E["Excluir aluno"]
+  M2C --> M2F["Enviar documento"]
+  M2C --> M2G["Excluir documento"]
+  M2C --> M2H["Abrir turma do aluno"]
+  M2H --> N1
+
+  N --> N1
+  N1 --> N2["Ver dados da turma"]
+  N1 --> N3["Ver alunos da turma"]
+  N1 --> N4["Ver se respondeu avaliacao"]
+  N1 --> N5["Copiar link de avaliacao"]
+  N1 --> N6["Concluir ou reabrir turma"]
+  N1 --> N7["Concluir ou reabrir aluno"]
+  N1 --> N8["Gerar PDF ou PNG da turma"]
+  N1 --> M2C
+
+  O --> O1["/admin/controle-avaliacoes"]
+  O --> O2["/admin/relatorio-avaliacoes"]
+  O --> O3["/admin/avaliacoes/:id"]
+  O --> O4["/admin/avaliacoes"]
+
+  O1 --> O1A["Escolher turma"]
+  O1 --> O1B["Filtrar respondidos e pendentes"]
+  O1 --> O1C["Abrir perfil do aluno"]
+  O1 --> O1D["Ver avaliacao"]
+  O1C --> M2C
+  O1D --> O3
+
+  O2 --> O2A["Filtrar avaliacoes"]
+  O2 --> O2B["Ver metricas e graficos"]
+  O2 --> O2C["Ordenar taxa por turma"]
+  O2 --> O2D["Exportar PDF, PNG e Excel"]
+  O2 --> O2E["Clicar no bloco para ver avaliacao"]
+  O2 --> O2F["Clicar no nome para abrir perfil"]
+  O2E --> O3
+  O2F --> M2C
+
+  O3 --> O3A["Ver avaliacao de reacao"]
+  O3 --> O3B["Gerar cabecalho SWC com dados do aluno"]
+  O3 --> O3C["Baixar PDF ou PNG"]
+
+  O4 --> O2
+
+  P --> P1["/admin/relatorio-avaliacoes"]
+  P --> P2["/admin/relatorio-turmas"]
+  P --> P3["/admin/relatorio-alunos"]
+
+  P2 --> P2A["Filtrar turmas"]
+  P2 --> P2B["Ver total, online e presencial"]
+  P2 --> P2C["Exportar PDF, PNG e Excel"]
+  P2 --> P2D["Abrir turma"]
+  P2D --> N1
+
+  P3 --> P3A["Filtrar alunos"]
+  P3 --> P3B["Exportar PDF, PNG e Excel"]
+  P3 --> P3C["Abrir perfil do aluno"]
+  P3C --> M2C
+
+  Q --> Q1["/admin/aniversariantes"]
+  Q --> Q2["/admin/historico"]
+  Q --> Q3["/admin/solicitacoes"]
+  Q --> Q4["/admin/usuarios"]
+
+  Q1 --> Q1A["Ver aniversariantes por mes"]
+  Q1 --> Q1B["Criar, editar e excluir mensagens"]
+  Q1 --> Q1C["Abrir perfil do aluno"]
+  Q1C --> M2C
+
+  Q2 --> Q2A["Filtrar historico"]
+  Q2 --> Q2B["Abrir perfil do aluno"]
+  Q2B --> M2C
+
+  Q3 --> Q3A["Ver solicitacoes pendentes"]
+  Q3 --> Q3B["Aprovar usuario admin"]
+  Q3 --> Q3C["Excluir solicitacao"]
+
+  Q4 --> Q4A["Ver administradores"]
+  Q4 --> Q4B["Alterar papel do usuario"]
+
+  I --> R1["Notificacao de aniversarios"]
+  I --> R2["Notificacao de solicitacoes pendentes"]
+  R1 --> Q1
+  R2 --> Q3

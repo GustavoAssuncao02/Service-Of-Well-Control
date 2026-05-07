@@ -59,6 +59,22 @@ dashboardRoutes.get(
        ORDER BY total DESC`
     );
 
+    const classModalityDistribution = await db.all(
+      `SELECT cp.nome AS modalidade, COUNT(DISTINCT ta.aluno_id) AS total
+       FROM turma_alunos ta
+       JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+       GROUP BY cp.id
+       ORDER BY total DESC, cp.nome ASC`
+    );
+
+    const classModalityUsage = await db.all(
+      `SELECT cp.nome AS modalidade, COUNT(DISTINCT ta.aluno_id) AS total
+       FROM classificacoes_presenca cp
+       LEFT JOIN turma_alunos ta ON ta.classificacao_presenca_id = cp.id
+       GROUP BY cp.id
+       ORDER BY total DESC, cp.nome ASC`
+    );
+
     const studentEvolution = await db.all(
       `SELECT DATE_FORMAT(criado_em, '%Y-%m') AS periodo, COUNT(*) AS total
        FROM alunos
@@ -92,6 +108,10 @@ dashboardRoutes.get(
       courseDistribution,
       courseFrequency,
       sponsorDistribution,
+      classModalityDistribution,
+      classModalityUsage,
+      attendanceDistribution: classModalityDistribution,
+      attendanceClassificationDistribution: classModalityUsage,
       studentEvolution,
       upcomingClasses
     });

@@ -90,6 +90,15 @@ CREATE TABLE IF NOT EXISTS salas_online (
   UNIQUE KEY uq_salas_online_nome (nome)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS classificacoes_presenca (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(191) NOT NULL,
+  descricao TEXT,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_classificacoes_presenca_nome (nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS classificacoes_cursos (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nome VARCHAR(191) NOT NULL,
@@ -140,18 +149,23 @@ CREATE TABLE IF NOT EXISTS turma_alunos (
   id INT AUTO_INCREMENT PRIMARY KEY,
   turma_id INT NOT NULL,
   aluno_id INT NOT NULL,
+  classificacao_presenca_id INT NOT NULL,
   status ENUM('Em andamento', 'Concluído') NOT NULL DEFAULT 'Em andamento',
   matriculado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   concluido_em DATETIME,
   UNIQUE KEY uq_turma_aluno (turma_id, aluno_id),
   INDEX idx_turma_alunos_status (status),
   INDEX idx_turma_alunos_aluno_id (aluno_id),
+  INDEX idx_turma_alunos_classificacao_presenca_id (classificacao_presenca_id),
   CONSTRAINT fk_turma_alunos_turma
     FOREIGN KEY (turma_id) REFERENCES turmas(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_turma_alunos_aluno
     FOREIGN KEY (aluno_id) REFERENCES alunos(id)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
+  CONSTRAINT fk_turma_alunos_classificacao_presenca
+    FOREIGN KEY (classificacao_presenca_id) REFERENCES classificacoes_presenca(id)
+    ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS aluno_documentos (

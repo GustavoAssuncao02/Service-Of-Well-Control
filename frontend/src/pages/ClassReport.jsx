@@ -1,10 +1,10 @@
-import { Download, FileSpreadsheet, FileText, Filter, X } from 'lucide-react';
+import { Download, FileImage, FileSpreadsheet, FileText, Filter, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
-import { downloadClassesExcel, downloadClassesPdf } from '../utils/classReportExport.js';
+import { downloadClassesExcel, downloadClassesPdf, downloadClassesPng } from '../utils/classReportExport.js';
 import { isDoneStatus } from '../utils/display.js';
 
 const initialFilters = {
@@ -20,6 +20,7 @@ const initialFilters = {
   status: '',
   local: '',
   onlineRoom: '',
+  classModalityId: '',
   minStudents: '',
   maxStudents: '',
   hasEvaluations: '',
@@ -62,17 +63,22 @@ export default function ClassReport() {
   const [statuses, setStatuses] = useState([]);
   const [locations, setLocations] = useState([]);
   const [onlineRooms, setOnlineRooms] = useState([]);
+  const [classModalities, setClassModalities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const metrics = useMemo(() => {
     const totalStudents = classes.reduce((sum, turma) => sum + numberValue(turma.total_alunos), 0);
+    const presencialStudents = classes.reduce((sum, turma) => sum + numberValue(turma.alunos_presenciais), 0);
+    const onlineStudents = classes.reduce((sum, turma) => sum + numberValue(turma.alunos_online), 0);
     const completedStudents = classes.reduce((sum, turma) => sum + numberValue(turma.alunos_concluidos), 0);
     const receivedEvaluations = classes.reduce((sum, turma) => sum + numberValue(turma.avaliacoes_recebidas), 0);
 
     return {
       totalClasses: classes.length,
       totalStudents,
+      presencialStudents,
+      onlineStudents,
       receivedEvaluations,
       responseRate: completedStudents ? (receivedEvaluations * 100) / completedStudents : 0
     };
@@ -94,6 +100,14 @@ export default function ClassReport() {
     if (activeFilters.status) labels.push(`Status: ${activeFilters.status}`);
     if (activeFilters.local) labels.push(`Local: ${activeFilters.local}`);
     if (activeFilters.onlineRoom) labels.push(`Sala online: ${activeFilters.onlineRoom}`);
+    if (activeFilters.classModalityId) {
+      labels.push(
+        `Modalidade: ${
+          classModalities.find((item) => String(item.id) === String(activeFilters.classModalityId))?.nome ||
+          activeFilters.classModalityId
+        }`
+      );
+    }
     if (activeFilters.minStudents) labels.push(`Min. alunos: ${activeFilters.minStudents}`);
     if (activeFilters.maxStudents) labels.push(`Max. alunos: ${activeFilters.maxStudents}`);
     if (activeFilters.hasEvaluations) labels.push(`Tem avaliacoes: ${yesNoLabel(activeFilters.hasEvaluations)}`);
@@ -101,7 +115,7 @@ export default function ClassReport() {
     if (activeFilters.maxResponseRate) labels.push(`Max. resposta: ${activeFilters.maxResponseRate}%`);
 
     return labels.join('; ') || 'Sem filtros';
-  }, [activeFilters, courses, classifications, instructors]);
+  }, [activeFilters, courses, classifications, instructors, classModalities]);
 
   async function loadSupportData() {
     const [courseResponse, classificationResponse, instructorResponse, optionsResponse] = await Promise.all([
@@ -117,6 +131,7 @@ export default function ClassReport() {
     setStatuses(optionsResponse.data.statuses || []);
     setLocations(optionsResponse.data.locations || []);
     setOnlineRooms(optionsResponse.data.onlineRooms || []);
+    setClassModalities(optionsResponse.data.classModalities || optionsResponse.data.attendanceClassifications || []);
   }
 
   async function loadReport(nextFilters = filters) {
@@ -243,6 +258,16 @@ export default function ClassReport() {
               ))}
             </select>
           </Field>
+          <Field label="Modalidade do aluno">
+            <select value={filters.classModalityId} onChange={(event) => update('classModalityId', event.target.value)}>
+              <option value="">Todas</option>
+              {classModalities.map((modality) => (
+                <option key={modality.id} value={modality.id}>
+                  {modality.nome}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Min. alunos">
             <input type="number" min="0" value={filters.minStudents} onChange={(event) => update('minStudents', event.target.value)} />
           </Field>
@@ -285,6 +310,14 @@ export default function ClassReport() {
           <strong>{metrics.totalStudents}</strong>
         </article>
         <article className="metric">
+          <span>Presenciais</span>
+          <strong>{metrics.presencialStudents}</strong>
+        </article>
+        <article className="metric">
+          <span>Online</span>
+          <strong>{metrics.onlineStudents}</strong>
+        </article>
+        <article className="metric">
           <span>Avaliacoes recebidas</span>
           <strong>{metrics.receivedEvaluations}</strong>
         </article>
@@ -304,6 +337,10 @@ export default function ClassReport() {
             <button className="ghost-button" type="button" onClick={() => downloadClassesPdf(classes, filtersSummary)} disabled={!classes.length}>
               <FileText size={16} />
               PDF
+            </button>
+            <button className="ghost-button" type="button" onClick={() => downloadClassesPng(classes, filtersSummary)} disabled={!classes.length}>
+              <FileImage size={16} />
+              PNG
             </button>
             <button className="ghost-button" type="button" onClick={() => downloadClassesExcel(classes)} disabled={!classes.length}>
               <FileSpreadsheet size={16} />
@@ -326,6 +363,7 @@ export default function ClassReport() {
                   <th>Periodo</th>
                   <th>Local</th>
                   <th>Alunos</th>
+                  <th>Modalidade</th>
                   <th>Avaliacoes</th>
                   <th>Resposta</th>
                   <th>Media</th>
@@ -361,6 +399,10 @@ export default function ClassReport() {
                     <td>
                       <strong>{turma.total_alunos || 0}</strong>
                       <small>{turma.alunos_concluidos || 0} concluidos</small>
+                    </td>
+                    <td>
+                      <strong>P: {turma.alunos_presenciais || 0} / O: {turma.alunos_online || 0}</strong>
+                      <small>{turma.modalidades_aula || turma.classificacoes_presenca || '-'}</small>
                     </td>
                     <td>
                       <strong>{turma.avaliacoes_recebidas || 0}</strong>

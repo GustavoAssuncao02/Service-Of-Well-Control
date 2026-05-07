@@ -154,6 +154,33 @@ async function ensureOnlineRoomSupport(db) {
   }
 }
 
+async function ensureAttendanceClassificationSupport(db) {
+  await db.run(
+    `INSERT IGNORE INTO classificacoes_presenca (nome, descricao)
+     VALUES
+       ('Presencial', 'Aluno realiza a aula na modalidade presencial.'),
+       ('Online', 'Aluno realiza a aula na modalidade online.')`
+  );
+
+  const defaultClassification = await db.get("SELECT id FROM classificacoes_presenca WHERE nome = 'Presencial'");
+
+  await ensureColumn(db, 'turma_alunos', 'classificacao_presenca_id', 'classificacao_presenca_id INT NULL AFTER aluno_id');
+  await db.run('UPDATE turma_alunos SET classificacao_presenca_id = ? WHERE classificacao_presenca_id IS NULL', defaultClassification.id);
+
+  const attendanceColumn = await getColumn(db, 'turma_alunos', 'classificacao_presenca_id');
+  if (attendanceColumn?.IS_NULLABLE === 'YES') {
+    await db.run('ALTER TABLE turma_alunos MODIFY classificacao_presenca_id INT NOT NULL');
+  }
+
+  await ensureIndex(db, 'turma_alunos', 'idx_turma_alunos_classificacao_presenca_id', 'classificacao_presenca_id');
+  await ensureForeignKey(
+    db,
+    'fk_turma_alunos_classificacao_presenca',
+    'turma_alunos',
+    'FOREIGN KEY (classificacao_presenca_id) REFERENCES classificacoes_presenca(id) ON DELETE RESTRICT'
+  );
+}
+
 async function ensureLocationSupport(db) {
   const legacyLocations = await db.all(
     `SELECT DISTINCT COALESCE(l.nome, TRIM(t.local)) AS nome
@@ -294,6 +321,7 @@ export async function initializeDatabase() {
     await ensureBirthdayMessageSupport(db);
     await ensureCourseClassificationSupport(db);
     await ensureOnlineRoomSupport(db);
+    await ensureAttendanceClassificationSupport(db);
     await ensureLocationSupport(db);
     await ensureStudentNotesSupport(db);
     await ensureStudentDocumentDriveSupport(db);

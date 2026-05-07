@@ -1,10 +1,10 @@
-import { Download, FileSpreadsheet, FileText, Filter, Search, X } from 'lucide-react';
+import { Download, FileImage, FileSpreadsheet, FileText, Filter, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
-import { downloadStudentsExcel, downloadStudentsPdf } from '../utils/studentReportExport.js';
+import { downloadStudentsExcel, downloadStudentsPdf, downloadStudentsPng } from '../utils/studentReportExport.js';
 
 const initialFilters = {
   search: '',
@@ -16,6 +16,7 @@ const initialFilters = {
   companyId: '',
   courseId: '',
   classStatus: '',
+  classModalityId: '',
   hasClasses: '',
   minClasses: '',
   maxClasses: '',
@@ -55,6 +56,7 @@ export default function StudentReport() {
   const [courses, setCourses] = useState([]);
   const [cities, setCities] = useState([]);
   const [studentStates, setStudentStates] = useState([]);
+  const [classModalities, setClassModalities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -62,6 +64,8 @@ export default function StudentReport() {
     () => ({
       totalStudents: students.length,
       totalClasses: students.reduce((sum, student) => sum + numberValue(student.total_turmas), 0),
+      presencialParticipations: students.reduce((sum, student) => sum + numberValue(student.turmas_presenciais), 0),
+      onlineParticipations: students.reduce((sum, student) => sum + numberValue(student.turmas_online), 0),
       withClasses: students.filter((student) => numberValue(student.total_turmas) > 0).length,
       withDocuments: students.filter((student) => numberValue(student.total_documentos) > 0).length
     }),
@@ -79,6 +83,14 @@ export default function StudentReport() {
     if (activeFilters.companyId) labels.push(`Empresa: ${companies.find((item) => String(item.id) === String(activeFilters.companyId))?.nome || activeFilters.companyId}`);
     if (activeFilters.courseId) labels.push(`Curso: ${courses.find((item) => String(item.id) === String(activeFilters.courseId))?.nome || activeFilters.courseId}`);
     if (activeFilters.classStatus) labels.push(`Status em turma: ${activeFilters.classStatus}`);
+    if (activeFilters.classModalityId) {
+      labels.push(
+        `Modalidade: ${
+          classModalities.find((item) => String(item.id) === String(activeFilters.classModalityId))?.nome ||
+          activeFilters.classModalityId
+        }`
+      );
+    }
     if (activeFilters.hasClasses) labels.push(`Tem turmas: ${yesNoLabel(activeFilters.hasClasses)}`);
     if (activeFilters.minClasses) labels.push(`Min. turmas: ${activeFilters.minClasses}`);
     if (activeFilters.maxClasses) labels.push(`Max. turmas: ${activeFilters.maxClasses}`);
@@ -91,7 +103,7 @@ export default function StudentReport() {
     if (activeFilters.estado) labels.push(`Estado: ${activeFilters.estado}`);
 
     return labels.join('; ') || 'Sem filtros';
-  }, [activeFilters, companies, courses]);
+  }, [activeFilters, companies, courses, classModalities]);
 
   async function loadSupportData() {
     const [companyResponse, courseResponse, reportOptionsResponse] = await Promise.all([
@@ -103,6 +115,7 @@ export default function StudentReport() {
     setCourses(courseResponse.data);
     setCities(reportOptionsResponse.data.cities || []);
     setStudentStates(reportOptionsResponse.data.states || []);
+    setClassModalities(reportOptionsResponse.data.classModalities || reportOptionsResponse.data.attendanceClassifications || []);
   }
 
   async function loadReport(nextFilters = filters) {
@@ -201,6 +214,16 @@ export default function StudentReport() {
               <option value="">Todos</option>
               <option value="Em andamento">Em andamento</option>
               <option value="Concluído">Concluído</option>
+            </select>
+          </Field>
+          <Field label="Modalidade do aluno">
+            <select value={filters.classModalityId} onChange={(event) => update('classModalityId', event.target.value)}>
+              <option value="">Todas</option>
+              {classModalities.map((modality) => (
+                <option key={modality.id} value={modality.id}>
+                  {modality.nome}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="Tem turmas">
@@ -303,6 +326,14 @@ export default function StudentReport() {
           <strong>{metrics.totalClasses}</strong>
         </article>
         <article className="metric">
+          <span>Presenciais</span>
+          <strong>{metrics.presencialParticipations}</strong>
+        </article>
+        <article className="metric">
+          <span>Online</span>
+          <strong>{metrics.onlineParticipations}</strong>
+        </article>
+        <article className="metric">
           <span>Com turmas</span>
           <strong>{metrics.withClasses}</strong>
         </article>
@@ -322,6 +353,10 @@ export default function StudentReport() {
             <button className="ghost-button" type="button" onClick={() => downloadStudentsPdf(students, filtersSummary)} disabled={!students.length}>
               <FileText size={16} />
               PDF
+            </button>
+            <button className="ghost-button" type="button" onClick={() => downloadStudentsPng(students, filtersSummary)} disabled={!students.length}>
+              <FileImage size={16} />
+              PNG
             </button>
             <button className="ghost-button" type="button" onClick={() => downloadStudentsExcel(students)} disabled={!students.length}>
               <FileSpreadsheet size={16} />
@@ -346,6 +381,7 @@ export default function StudentReport() {
                   <th>Operacao</th>
                   <th>Funcao</th>
                   <th>Turmas</th>
+                  <th>Modalidade</th>
                   <th>Concluidas</th>
                   <th>Documentos</th>
                   <th>Cadastro</th>
@@ -375,6 +411,10 @@ export default function StudentReport() {
                     <td>{student.operacao || '-'}</td>
                     <td>{student.funcao_descricao || student.funcao || '-'}</td>
                     <td>{student.total_turmas || 0}</td>
+                    <td>
+                      <strong>P: {student.turmas_presenciais || 0} / O: {student.turmas_online || 0}</strong>
+                      <small>{student.modalidades_aula || student.classificacoes_presenca || '-'}</small>
+                    </td>
                     <td>{student.turmas_concluidas || 0}</td>
                     <td>{student.total_documentos || 0}</td>
                     <td>{formatDate(student.data_cadastro)}</td>

@@ -3,6 +3,11 @@ import { api } from '../api/client.js';
 
 const AuthContext = createContext(null);
 
+function localDateKey() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('swc_user');
@@ -13,6 +18,8 @@ export function AuthProvider({ children }) {
     const { data } = await api.post('/auth/login', { email, password });
     localStorage.setItem('swc_token', data.token);
     localStorage.setItem('swc_user', JSON.stringify(data.user));
+    localStorage.setItem(`swc_login_day_${data.user.id}`, localDateKey());
+    localStorage.setItem(`swc_login_event_${data.user.id}`, String(Date.now()));
     setUser(data.user);
     return data.user;
   }

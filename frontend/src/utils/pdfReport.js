@@ -1,5 +1,6 @@
 import { formatDate } from './date.js';
 import { isVisiblePlace } from './display.js';
+import { downloadPdfCommandPagesAsPng } from './pngReport.js';
 
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
@@ -101,22 +102,23 @@ function buildPdf(pages) {
   return pdf;
 }
 
-export function downloadClassReport(turma) {
+function buildClassReportPages(turma) {
   const pages = [];
   let commands = [];
   let y = PAGE_HEIGHT - 36;
   const margin = 36;
   const contentWidth = PAGE_WIDTH - margin * 2;
-  const rowHeight = 24;
+  const minRowHeight = 24;
   const headerHeight = 24;
   const columns = [
     { label: '#', width: 24, getValue: (_student, index) => String(index + 1) },
-    { label: 'Nome', width: 160, getValue: (student) => student.nome_completo },
-    { label: 'Telefone', width: 88, getValue: (student) => student.telefone },
-    { label: 'Email', width: 160, getValue: (student) => student.email },
-    { label: 'Empresa', width: 102, getValue: (student) => student.empresa_nome || student.empresa || student.responsavel_inscricao },
-    { label: 'Funcao', width: 94, getValue: (student) => (student.funcao === 'Outro' ? student.funcao_outro : student.funcao) },
-    { label: 'Operacao', width: 82, getValue: (student) => student.operacao },
+    { label: 'Nome', width: 140, getValue: (student) => student.nome_completo },
+    { label: 'Modalidade', width: 94, getValue: (student) => student.modalidade_aula_nome || student.classificacao_presenca_nome },
+    { label: 'Telefone', width: 82, getValue: (student) => student.telefone },
+    { label: 'Email', width: 132, getValue: (student) => student.email },
+    { label: 'Empresa', width: 90, getValue: (student) => student.empresa_nome || student.empresa || student.responsavel_inscricao },
+    { label: 'Funcao', width: 76, getValue: (student) => (student.funcao === 'Outro' ? student.funcao_outro : student.funcao) },
+    { label: 'Operacao', width: 72, getValue: (student) => student.operacao },
     { label: 'Status', width: 60, getValue: (student) => student.status_turma }
   ];
 
@@ -155,11 +157,31 @@ export function downloadClassReport(turma) {
     return Math.max(4, Math.floor((width - 8) / (size * 0.52)));
   }
 
-  function cellText(value, width, size = 7) {
+  function cellLines(value, width, size = 6.2) {
     const text = plainText(value);
     const max = maxCharacters(width, size);
-    if (text.length <= max) return text;
-    return `${text.slice(0, Math.max(1, max - 3))}...`;
+    const lines = [];
+    let line = '';
+
+    text.split(/\s+/).filter(Boolean).forEach((word) => {
+      const chunks = [];
+      for (let index = 0; index < word.length; index += max) {
+        chunks.push(word.slice(index, index + max));
+      }
+
+      chunks.forEach((chunk) => {
+        const nextLine = line ? `${line} ${chunk}` : chunk;
+        if (nextLine.length > max && line) {
+          lines.push(line);
+          line = chunk;
+        } else {
+          line = nextLine;
+        }
+      });
+    });
+
+    if (line) lines.push(line);
+    return lines.length ? lines : ['-'];
   }
 
   function addTableHeader() {
@@ -175,9 +197,11 @@ export function downloadClassReport(turma) {
   }
 
   function addStudentRow(student, index, turma) {
+    const rowLines = columns.map((column) => cellLines(column.getValue(student, index), column.width));
+    const rowHeight = Math.max(minRowHeight, Math.max(...rowLines.map((lines) => lines.length)) * 8 + 10);
+
     if (y - rowHeight < margin + 20) {
       startPage(true);
-      addCourseHeader(turma);
       addTableHeader();
     }
 
@@ -187,9 +211,11 @@ export function downloadClassReport(turma) {
     }
 
     let x = margin;
-    columns.forEach((column) => {
+    columns.forEach((column, columnIndex) => {
       strokeRect(x, rowY, column.width, rowHeight);
-      addText(cellText(column.getValue(student, index), column.width), x + 4, rowY + 9, { size: 7 });
+      rowLines[columnIndex].forEach((line, lineIndex) => {
+        addText(line, x + 4, rowY + rowHeight - 11 - lineIndex * 8, { size: 6.2 });
+      });
       x += column.width;
     });
 
@@ -212,8 +238,8 @@ export function downloadClassReport(turma) {
   if (turma.alunos?.length) {
     turma.alunos.forEach((student, index) => addStudentRow(student, index));
   } else {
-    y -= rowHeight;
-    strokeRect(margin, y, contentWidth, rowHeight);
+    y -= minRowHeight;
+    strokeRect(margin, y, contentWidth, minRowHeight);
     addText('Nenhum aluno vinculado a turma.', margin + 8, y + 9, { size: 8 });
   }
 
@@ -223,27 +249,39 @@ export function downloadClassReport(turma) {
   addText(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, margin, margin, { size: 7 });
   pushPage();
 
+  return pages;
+}
+
+export function downloadClassReport(turma) {
+  const pages = buildClassReportPages(turma);
   const fileSlug = slugText(turma.curso_nome || `turma-${turma.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'turma';
   const pdf = buildPdf(pages);
   downloadBlob(new Blob([pdf], { type: 'application/pdf' }), `relatorio-${fileSlug}.pdf`);
 }
 
-export function downloadDayClassesReport(dayIso, classes = []) {
+export function downloadClassReportPng(turma) {
+  const pages = buildClassReportPages(turma);
+  const fileSlug = slugText(turma.curso_nome || `turma-${turma.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'turma';
+  downloadPdfCommandPagesAsPng(pages, `relatorio-${fileSlug}.png`, { pageWidth: PAGE_WIDTH, pageHeight: PAGE_HEIGHT });
+}
+
+function buildDayClassesReportPages(dayIso, classes = []) {
   const pages = [];
   let commands = [];
   let y = PAGE_HEIGHT - 36;
   const margin = 36;
   const contentWidth = PAGE_WIDTH - margin * 2;
-  const rowHeight = 24;
+  const minRowHeight = 24;
   const headerHeight = 24;
   const columns = [
     { label: '#', width: 24, getValue: (_student, index) => String(index + 1) },
-    { label: 'Nome', width: 160, getValue: (student) => student.nome_completo },
-    { label: 'Telefone', width: 88, getValue: (student) => student.telefone },
-    { label: 'Email', width: 160, getValue: (student) => student.email },
-    { label: 'Empresa', width: 102, getValue: (student) => student.empresa_nome || student.empresa || student.responsavel_inscricao },
-    { label: 'Funcao', width: 94, getValue: (student) => (student.funcao === 'Outro' ? student.funcao_outro : student.funcao) },
-    { label: 'Operacao', width: 82, getValue: (student) => student.operacao },
+    { label: 'Nome', width: 140, getValue: (student) => student.nome_completo },
+    { label: 'Modalidade', width: 94, getValue: (student) => student.modalidade_aula_nome || student.classificacao_presenca_nome },
+    { label: 'Telefone', width: 82, getValue: (student) => student.telefone },
+    { label: 'Email', width: 132, getValue: (student) => student.email },
+    { label: 'Empresa', width: 90, getValue: (student) => student.empresa_nome || student.empresa || student.responsavel_inscricao },
+    { label: 'Funcao', width: 76, getValue: (student) => (student.funcao === 'Outro' ? student.funcao_outro : student.funcao) },
+    { label: 'Operacao', width: 72, getValue: (student) => student.operacao },
     { label: 'Status', width: 60, getValue: (student) => student.status_turma }
   ];
 
@@ -271,11 +309,31 @@ export function downloadDayClassesReport(dayIso, classes = []) {
     return Math.max(4, Math.floor((width - 8) / (size * 0.52)));
   }
 
-  function cellText(value, width, size = 7) {
+  function cellLines(value, width, size = 6.2) {
     const text = plainText(value);
     const max = maxCharacters(width, size);
-    if (text.length <= max) return text;
-    return `${text.slice(0, Math.max(1, max - 3))}...`;
+    const lines = [];
+    let line = '';
+
+    text.split(/\s+/).filter(Boolean).forEach((word) => {
+      const chunks = [];
+      for (let index = 0; index < word.length; index += max) {
+        chunks.push(word.slice(index, index + max));
+      }
+
+      chunks.forEach((chunk) => {
+        const nextLine = line ? `${line} ${chunk}` : chunk;
+        if (nextLine.length > max && line) {
+          lines.push(line);
+          line = chunk;
+        } else {
+          line = nextLine;
+        }
+      });
+    });
+
+    if (line) lines.push(line);
+    return lines.length ? lines : ['-'];
   }
 
   function startPage(continued = false) {
@@ -322,6 +380,9 @@ export function downloadDayClassesReport(dayIso, classes = []) {
   }
 
   function addStudentRow(student, index) {
+    const rowLines = columns.map((column) => cellLines(column.getValue(student, index), column.width));
+    const rowHeight = Math.max(minRowHeight, Math.max(...rowLines.map((lines) => lines.length)) * 8 + 10);
+
     if (y - rowHeight < margin + 20) {
       startPage(true);
       addTableHeader();
@@ -333,9 +394,11 @@ export function downloadDayClassesReport(dayIso, classes = []) {
     }
 
     let x = margin;
-    columns.forEach((column) => {
+    columns.forEach((column, columnIndex) => {
       strokeRect(x, rowY, column.width, rowHeight);
-      addText(cellText(column.getValue(student, index), column.width), x + 4, rowY + 9, { size: 7 });
+      rowLines[columnIndex].forEach((line, lineIndex) => {
+        addText(line, x + 4, rowY + rowHeight - 11 - lineIndex * 8, { size: 6.2 });
+      });
       x += column.width;
     });
 
@@ -352,22 +415,33 @@ export function downloadDayClassesReport(dayIso, classes = []) {
       if (turma.alunos?.length) {
         turma.alunos.forEach((student, index) => addStudentRow(student, index, turma));
       } else {
-        y -= rowHeight;
-        strokeRect(margin, y, contentWidth, rowHeight);
+        y -= minRowHeight;
+        strokeRect(margin, y, contentWidth, minRowHeight);
         addText('Nenhum aluno vinculado a esta turma.', margin + 8, y + 9, { size: 8 });
       }
 
       y -= 18;
     });
   } else {
-    y -= rowHeight;
-    strokeRect(margin, y, contentWidth, rowHeight);
+    y -= minRowHeight;
+    strokeRect(margin, y, contentWidth, minRowHeight);
     addText('Nenhum curso encontrado para a data selecionada.', margin + 8, y + 10, { size: 8 });
   }
 
   pushPage();
 
+  return pages;
+}
+
+export function downloadDayClassesReport(dayIso, classes = []) {
+  const pages = buildDayClassesReportPages(dayIso, classes);
   const fileSlug = slugText(`cursos-${dayIso}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cursos-do-dia';
   const pdf = buildPdf(pages);
   downloadBlob(new Blob([pdf], { type: 'application/pdf' }), `relatorio-${fileSlug}.pdf`);
+}
+
+export function downloadDayClassesReportPng(dayIso, classes = []) {
+  const pages = buildDayClassesReportPages(dayIso, classes);
+  const fileSlug = slugText(`cursos-${dayIso}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cursos-do-dia';
+  downloadPdfCommandPagesAsPng(pages, `relatorio-${fileSlug}.png`, { pageWidth: PAGE_WIDTH, pageHeight: PAGE_HEIGHT });
 }

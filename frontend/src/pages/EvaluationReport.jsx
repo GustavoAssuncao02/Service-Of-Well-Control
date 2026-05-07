@@ -1,10 +1,11 @@
-import { ChevronDown, Download, FileSpreadsheet, FileText, Filter, Search, X } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, Download, FileImage, FileSpreadsheet, FileText, Filter, Search, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
-import { downloadEvaluationsExcel, downloadEvaluationsPdf } from '../utils/evaluationReportExport.js';
+import { downloadEvaluationsExcel, downloadEvaluationsPdf, downloadEvaluationsPng } from '../utils/evaluationReportExport.js';
 
 const initialFilters = {
   search: '',
@@ -20,6 +21,23 @@ const initialFilters = {
   minScore: '',
   maxScore: ''
 };
+
+const emptyMetrics = {
+  overall: { media_geral: 0, total_avaliacoes: 0 },
+  byCourse: [],
+  byInstructor: [],
+  evolution: [],
+  distribution: [],
+  zoomTest: [],
+  responseRate: []
+};
+
+const responseRateColumns = [
+  { key: 'curso_nome', label: 'Turma' },
+  { key: 'data_inicio', label: 'Periodo' },
+  { key: 'total_respostas', label: 'Respostas' },
+  { key: 'taxa_resposta', label: 'Taxa' }
+];
 
 const criteriaLabels = [
   'Conteudo apresentado',
@@ -58,6 +76,14 @@ function formatNumber(value, decimals = 2) {
   return number.toFixed(decimals);
 }
 
+function responseRateSortValue(item, key) {
+  if (key === 'curso_nome') return String(item.curso_nome || '').toLowerCase();
+  if (key === 'data_inicio') return new Date(item.data_inicio || 0).getTime();
+  if (key === 'total_respostas') return Number(item.total_respostas || 0);
+  if (key === 'taxa_resposta') return Number(item.taxa_resposta || 0);
+  return item[key] ?? '';
+}
+
 function classLabel(turma) {
   if (!turma) return '';
   return `${turma.curso_nome} - ${formatDate(turma.data_inicio)}`;
@@ -77,6 +103,7 @@ export default function EvaluationReport() {
     total_turmas: 0,
     total_comentarios: 0
   });
+  const [metrics, setMetrics] = useState(emptyMetrics);
   const [criteria, setCriteria] = useState({});
   const [evaluations, setEvaluations] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -84,6 +111,7 @@ export default function EvaluationReport() {
   const [classes, setClasses] = useState([]);
   const [zoomTests, setZoomTests] = useState([]);
   const [criteriaOpen, setCriteriaOpen] = useState(false);
+  const [responseRateSort, setResponseRateSort] = useState({ key: 'data_inicio', direction: 'desc' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -95,6 +123,31 @@ export default function EvaluationReport() {
       })),
     [criteria]
   );
+
+  const zoomTestData = useMemo(
+    () =>
+      (metrics.zoomTest || []).map((item) => ({
+        ...item,
+        total: Number(item.total || 0),
+        percentual: Number(item.percentual || 0)
+      })),
+    [metrics.zoomTest]
+  );
+
+  const sortedResponseRate = useMemo(() => {
+    const directionMultiplier = responseRateSort.direction === 'asc' ? 1 : -1;
+
+    return [...(metrics.responseRate || [])].sort((a, b) => {
+      const firstValue = responseRateSortValue(a, responseRateSort.key);
+      const secondValue = responseRateSortValue(b, responseRateSort.key);
+
+      if (typeof firstValue === 'string' || typeof secondValue === 'string') {
+        return String(firstValue).localeCompare(String(secondValue), 'pt-BR') * directionMultiplier;
+      }
+
+      return (Number(firstValue || 0) - Number(secondValue || 0)) * directionMultiplier;
+    });
+  }, [metrics.responseRate, responseRateSort]);
 
   const filtersSummary = useMemo(() => {
     const labels = [];
@@ -133,10 +186,15 @@ export default function EvaluationReport() {
     setLoading(true);
     try {
       const params = cleanParams(nextFilters);
-      const { data } = await api.get('/evaluations/report', { params });
+      const [reportResponse, metricResponse] = await Promise.all([
+        api.get('/evaluations/report', { params }),
+        api.get('/evaluations/metrics', { params })
+      ]);
+      const { data } = reportResponse;
       setSummary(data.summary || {});
       setCriteria(data.criteria || {});
       setEvaluations(data.evaluations || []);
+      setMetrics({ ...emptyMetrics, ...(metricResponse.data || {}) });
       setActiveFilters({ ...nextFilters });
     } catch (err) {
       setError(getApiError(err));
@@ -162,6 +220,19 @@ export default function EvaluationReport() {
   function clearFilters() {
     setFilters(initialFilters);
     loadReport(initialFilters);
+  }
+
+  function applyChartFilter(extraFilters) {
+    const nextFilters = { ...activeFilters, ...extraFilters };
+    setFilters(nextFilters);
+    loadReport(nextFilters);
+  }
+
+  function sortResponseRate(key) {
+    setResponseRateSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc'
+    }));
   }
 
   return (
@@ -281,6 +352,183 @@ export default function EvaluationReport() {
         </article>
       </section>
 
+      <section className="dashboard-grid">
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Media por curso</h2>
+              <small>Clique em uma barra para filtrar o relatorio.</small>
+            </div>
+          </div>
+          {metrics.byCourse.length ? (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={metrics.byCourse}
+                  onClick={(state) => {
+                    const course = state?.activePayload?.[0]?.payload;
+                    if (course?.id) applyChartFilter({ courseId: String(course.id), classId: '' });
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="nome" tick={{ fontSize: 12 }} />
+                  <YAxis domain={[0, 10]} />
+                  <Tooltip formatter={(value, name, item) => [`${formatNumber(value, 2)} (${item.payload.total || 0} respostas)`, 'Media']} />
+                  <Bar dataKey="media" fill="#2f80c3" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Sem medias por curso" description="As medias aparecem conforme as avaliacoes filtradas." />
+          )}
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Media por instrutor</h2>
+              <small>Clique em uma barra para filtrar o relatorio.</small>
+            </div>
+          </div>
+          {metrics.byInstructor.length ? (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={metrics.byInstructor}
+                  onClick={(state) => {
+                    const instructor = state?.activePayload?.[0]?.payload;
+                    if (instructor?.id) applyChartFilter({ instructorId: String(instructor.id), classId: '' });
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="nome" tick={{ fontSize: 12 }} />
+                  <YAxis domain={[0, 10]} />
+                  <Tooltip formatter={(value, name, item) => [`${formatNumber(value, 2)} (${item.payload.total || 0} respostas)`, 'Media']} />
+                  <Bar dataKey="media" fill="#ff7a1a" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Sem medias por instrutor" description="As medias aparecem conforme as avaliacoes filtradas." />
+          )}
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Evolucao das notas</h2>
+              <small>Media mensal das avaliacoes de reacao.</small>
+            </div>
+          </div>
+          {metrics.evolution.length ? (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={metrics.evolution}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="periodo" tick={{ fontSize: 12 }} />
+                  <YAxis domain={[0, 10]} />
+                  <Tooltip formatter={(value, name, item) => [`${formatNumber(value, 2)} (${item.payload.total || 0} respostas)`, 'Media']} />
+                  <Line type="monotone" dataKey="media" stroke="#183b78" strokeWidth={3} dot={{ r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Sem evolucao" description="O historico aparece conforme as avaliacoes filtradas." />
+          )}
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Distribuicao de notas</h2>
+              <small>Quantidade de avaliacoes por nota arredondada.</small>
+            </div>
+          </div>
+          {metrics.distribution.length ? (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metrics.distribution}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="nota" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip formatter={(value) => [value, 'Avaliacoes']} />
+                  <Bar dataKey="total" fill="#18a058" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Sem distribuicao" description="A contagem por nota aparece conforme as avaliacoes filtradas." />
+          )}
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Teste no Zoom</h2>
+              <small>Percentual de participantes que fizeram ou nao fizeram o teste.</small>
+            </div>
+          </div>
+          {zoomTestData.some((item) => item.total > 0) ? (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={zoomTestData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                  <Tooltip formatter={(value, name, item) => [`${formatNumber(value, 1)}% (${item.payload.total || 0})`, 'Percentual']} />
+                  <Bar dataKey="percentual" fill="#7c3aed" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Sem dados de Zoom" description="Os percentuais aparecem conforme as avaliacoes filtradas." />
+          )}
+        </article>
+      </section>
+
+      <section className="panel response-rate-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Taxa de resposta por turma</h2>
+            <small>Compara alunos concluidos e avaliacoes recebidas.</small>
+          </div>
+        </div>
+        {metrics.responseRate.length ? (
+          <div className="table-wrap response-rate-scroll">
+            <table>
+              <thead>
+                <tr>
+                  {responseRateColumns.map((column) => (
+                    <th key={column.key}>
+                      <button className="table-sort-button" type="button" onClick={() => sortResponseRate(column.key)}>
+                        {column.label}
+                        <ArrowUpDown size={14} />
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedResponseRate.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.curso_nome}</td>
+                    <td>
+                      {formatDate(item.data_inicio)} a {formatDate(item.data_fim)}
+                    </td>
+                    <td>
+                      {item.total_respostas || 0}/{item.total_alunos || 0}
+                    </td>
+                    <td>{formatNumber(item.taxa_resposta, 2)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="Sem taxa de resposta" description="As turmas concluidas aparecem conforme os filtros." />
+        )}
+      </section>
+
       <section className={`panel collapsible-panel ${criteriaOpen ? 'is-open' : ''}`}>
         <button className="collapsible-heading" type="button" onClick={() => setCriteriaOpen((value) => !value)} aria-expanded={criteriaOpen}>
           <div>
@@ -316,6 +564,10 @@ export default function EvaluationReport() {
               <FileText size={16} />
               PDF
             </button>
+            <button className="ghost-button" type="button" onClick={() => downloadEvaluationsPng(evaluations, summary, filtersSummary)} disabled={!evaluations.length}>
+              <FileImage size={16} />
+              PNG
+            </button>
             <button className="ghost-button" type="button" onClick={() => downloadEvaluationsExcel(evaluations)} disabled={!evaluations.length}>
               <FileSpreadsheet size={16} />
               Excel
@@ -336,10 +588,8 @@ export default function EvaluationReport() {
                   <th>Curso</th>
                   <th>Instrutor</th>
                   <th>Turma</th>
-                  <th>Avaliacao</th>
                   <th>Nota</th>
-                  <th>Zoom</th>
-                  <th>Comentario</th>
+                  <th>Acoes</th>
                 </tr>
               </thead>
               <tbody>
@@ -348,16 +598,25 @@ export default function EvaluationReport() {
                     key={evaluation.id}
                     className="clickable-row"
                     tabIndex={0}
-                    onClick={() => navigate(`/admin/alunos/${evaluation.aluno_id}`)}
+                    onClick={() => navigate(`/admin/avaliacoes/${evaluation.id}`)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        navigate(`/admin/alunos/${evaluation.aluno_id}`);
+                        navigate(`/admin/avaliacoes/${evaluation.id}`);
                       }
                     }}
                   >
                     <td>
-                      <strong>{evaluation.aluno_nome}</strong>
+                      <button
+                        className="table-link-button"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/admin/alunos/${evaluation.aluno_id}`);
+                        }}
+                      >
+                        {evaluation.aluno_nome}
+                      </button>
                       <small>{evaluation.cpf}</small>
                     </td>
                     <td>{evaluation.curso_nome}</td>
@@ -365,10 +624,20 @@ export default function EvaluationReport() {
                     <td>
                       {formatDate(evaluation.data_inicio)} a {formatDate(evaluation.data_fim)}
                     </td>
-                    <td>{formatDate(evaluation.data_avaliacao)}</td>
                     <td>{formatNumber(evaluation.nota_geral, 2)}</td>
-                    <td>{evaluation.teste_zoom}</td>
-                    <td>{evaluation.comentario || '-'}</td>
+                    <td className="table-actions">
+                      <button
+                        className="small-button"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/admin/avaliacoes/${evaluation.id}`);
+                        }}
+                      >
+                        <UserRound size={15} />
+                        Gerar avaliacao
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
