@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
 import { getDb } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
 import { getDriveFileMetadata, getDriveFileStream } from '../services/googleDrive.service.js';
@@ -6,14 +8,43 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const driveRoutes = Router();
 
-driveRoutes.use(authenticate);
-
 function contentDispositionFilename(fileName) {
   const fallback = String(fileName || 'arquivo')
     .replace(/[^\x20-\x7E]/g, '_')
     .replace(/["\\]/g, '_');
 
   return `inline; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName || 'arquivo')}`;
+}
+
+function createFileTicket(user, fileId) {
+  return jwt.sign(
+    {
+      scope: 'drive:file',
+      fileId,
+      id: user.id,
+      role: user.role
+    },
+    env.jwtSecret,
+    { expiresIn: '90s' }
+  );
+}
+
+function verifyFileTicket(req, res, next) {
+  try {
+    const payload = jwt.verify(String(req.query.ticket || ''), env.jwtSecret);
+
+    if (payload.scope !== 'drive:file' || payload.fileId !== req.params.fileId) {
+      return res.status(401).json({ message: 'Link de arquivo invalido.' });
+    }
+
+    req.user = {
+      id: payload.id,
+      role: payload.role
+    };
+    return next();
+  } catch {
+    return res.status(401).json({ message: 'Link de arquivo expirado ou invalido.' });
+  }
 }
 
 async function findAccessibleFile(db, user, fileId) {
@@ -37,8 +68,26 @@ async function findAccessibleFile(db, user, fileId) {
   );
 }
 
+driveRoutes.post(
+  '/files/:fileId/ticket',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const file = await findAccessibleFile(db, req.user, req.params.fileId);
+
+    if (!file) {
+      return res.status(404).json({ message: 'Arquivo nao encontrado.' });
+    }
+
+    res.json({
+      url: `/api/drive/files/${encodeURIComponent(req.params.fileId)}?ticket=${encodeURIComponent(createFileTicket(req.user, req.params.fileId))}`
+    });
+  })
+);
+
 driveRoutes.get(
   '/files/:fileId',
+  verifyFileTicket,
   asyncHandler(async (req, res) => {
     const db = await getDb();
     const file = await findAccessibleFile(db, req.user, req.params.fileId);

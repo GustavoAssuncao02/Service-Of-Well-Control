@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, CheckCircle2, Download, FileImage, GraduationCap, MapPin, Monitor, RotateCcw, Send, UsersRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, Download, Eye, FileImage, GraduationCap, MapPin, Monitor, RotateCcw, Send, UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
@@ -238,9 +238,24 @@ export default function ClassDetails() {
                       <span className={`status-badge ${isDoneStatus(student.status_turma) ? 'done' : 'active'}`}>{student.status_turma}</span>
                     </td>
                     <td>
-                      <span className={`status-badge ${student.avaliacao_id ? 'done' : 'pending'}`}>
-                        {student.avaliacao_reacao_status || (student.avaliacao_id ? 'Respondeu' : 'Nao respondeu')}
-                      </span>
+                      <div className="inline-actions compact-actions">
+                        <span className={`status-badge ${student.avaliacao_id ? 'done' : 'pending'}`}>
+                          {student.avaliacao_reacao_status || (student.avaliacao_id ? 'Respondeu' : 'Nao respondeu')}
+                        </span>
+                        {student.avaliacao_id ? (
+                          <button
+                            className="small-button"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/admin/avaliacoes/${student.avaliacao_id}`);
+                            }}
+                          >
+                            <Eye size={15} />
+                            Ver avaliacao
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                     <td>
                       {isDoneStatus(student.status_turma) ? (

@@ -13,20 +13,14 @@ export async function openDriveFile(fileId) {
   }
 
   try {
-    const { data, headers } = await api.get(`/drive/files/${fileId}`, {
-      responseType: 'blob'
-    });
-    const mimeType = headers['content-type'] || data.type || 'application/octet-stream';
-    const blob = new Blob([data], { type: mimeType });
-    const url = URL.createObjectURL(blob);
+    const { data } = await api.post(`/drive/files/${fileId}/ticket`);
+    const url = new URL(data.url, api.defaults.baseURL || window.location.origin);
 
     if (popup) {
-      popup.location.href = url;
+      popup.location.href = url.toString();
     } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
+      window.open(url.toString(), '_blank', 'noopener,noreferrer');
     }
-
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (error) {
     if (popup) {
       popup.close();
