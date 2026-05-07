@@ -1,5 +1,5 @@
 import { Eye, Filter, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
@@ -14,8 +14,26 @@ function handleRowKeyDown(event, action) {
   }
 }
 
+const criteriaLabels = [
+  'Conteúdo apresentado',
+  'Aplicabilidade',
+  'Conhecimento do instrutor',
+  'Desempenho do instrutor',
+  'Estímulo à participação',
+  'Esclarecimento de dúvidas',
+  'Materiais utilizados',
+  'Infraestrutura',
+  'Carga horária',
+  'Participação e interesse',
+  'Pontualidade',
+  'Cumprimento de tarefas',
+  'Interação',
+  'Aprendizado'
+];
+
 export default function EvaluationControl() {
   const navigate = useNavigate();
+  const detailRef = useRef(null);
   const [classes, setClasses] = useState([]);
   const [classId, setClassId] = useState('');
   const [filter, setFilter] = useState('');
@@ -31,6 +49,47 @@ export default function EvaluationControl() {
       .then((response) => setClasses(response.data))
       .catch((err) => setError(getApiError(err)));
   }, []);
+
+  useEffect(() => {
+    if (!classes.length || classId) return;
+
+    const preferredClass = classes.find((turma) => Number(turma.avaliacoes_recebidas || 0) > 0) || classes.find((turma) => isDoneStatus(turma.status)) || classes[0];
+    setClassId(String(preferredClass.id));
+  }, [classes, classId]);
+
+  useEffect(() => {
+    if (!classId) {
+      setRows([]);
+      return;
+    }
+
+    let active = true;
+    const params = filter ? { filter } : {};
+    setError('');
+    setLoading(true);
+
+    api
+      .get(`/classes/${classId}/evaluation-status`, { params })
+      .then((response) => {
+        if (active) setRows(response.data);
+      })
+      .catch((err) => {
+        if (active) setError(getApiError(err));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [classId, filter]);
+
+  useEffect(() => {
+    if (selectedEvaluation) {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedEvaluation]);
 
   async function loadStatus(nextClassId = classId, nextFilter = filter) {
     if (!nextClassId) return;
@@ -63,6 +122,13 @@ export default function EvaluationControl() {
       setLoadingEvaluationId(null);
     }
   }
+
+  const selectedCriteria = selectedEvaluation
+    ? criteriaLabels.map((label, index) => ({
+        label,
+        score: selectedEvaluation[`nota_${index + 1}`]
+      }))
+    : [];
 
   return (
     <div className="page-stack">
@@ -158,7 +224,7 @@ export default function EvaluationControl() {
       </section>
 
       {selectedEvaluation ? (
-        <section className="panel detail-panel">
+        <section className="panel detail-panel" ref={detailRef}>
           <div className="panel-heading">
             <h2>Resposta individual</h2>
             <button className="icon-button" type="button" onClick={() => setSelectedEvaluation(null)} aria-label="Fechar">
@@ -170,11 +236,24 @@ export default function EvaluationControl() {
               <strong>{selectedEvaluation.aluno_nome}</strong>
               <span>{selectedEvaluation.curso_nome}</span>
               <span>{selectedEvaluation.instrutor_nome}</span>
+              <span>
+                {formatDate(selectedEvaluation.data_inicio)} a {formatDate(selectedEvaluation.data_fim)}
+              </span>
               <span>Nota geral: {selectedEvaluation.nota_geral}/10</span>
               <span>Teste de Zoom: {selectedEvaluation.teste_zoom}</span>
             </div>
-            <p>{selectedEvaluation.comentario || 'Sem comentário.'}</p>
+            <div className="criteria-list">
+              {selectedCriteria.map((criterion, index) => (
+                <div key={criterion.label}>
+                  <span>
+                    {index + 1}. {criterion.label}
+                  </span>
+                  <strong>{criterion.score ?? '-'}</strong>
+                </div>
+              ))}
+            </div>
           </div>
+          <p className="evaluation-comment">{selectedEvaluation.comentario || 'Sem comentário.'}</p>
         </section>
       ) : null}
     </div>

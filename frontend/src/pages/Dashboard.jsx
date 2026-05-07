@@ -1,7 +1,7 @@
-import { Activity, BookOpenCheck, CheckCircle2, GraduationCap, Monitor, TrendingUp, UserPlus, UsersRound } from 'lucide-react';
+import { Activity, BookOpenCheck, BriefcaseBusiness, CheckCircle2, GraduationCap, Monitor, TrendingUp, UserPlus, UsersRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
@@ -9,6 +9,7 @@ import { isDoneStatus } from '../utils/display.js';
 
 const sponsorColors = ['#3b82f6', '#f97316', '#16a34a', '#7c3aed'];
 const modalityColors = ['#f97316', '#3b82f6', '#16a34a', '#7c3aed', '#0f766e'];
+const companyColors = ['#1a3a6e', '#2f80c3', '#f97316', '#16a34a', '#7c3aed', '#0f766e', '#c2410c', '#475569'];
 
 function StatCard({ icon: Icon, label, value, tone, hint }) {
   return (
@@ -67,6 +68,20 @@ function StudentCountTooltip({ active, payload, total, nameKey }) {
   );
 }
 
+function CompanyDistributionTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+
+  const row = payload[0].payload || {};
+
+  return (
+    <div className="chart-tooltip">
+      <strong>{row.empresa || 'Empresa'}</strong>
+      <span>{formatPercent(row.percentual)}</span>
+      <small>{row.total} {Number(row.total) === 1 ? 'aluno' : 'alunos'}</small>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -91,6 +106,9 @@ export default function Dashboard() {
   const topCourse = courseFrequency?.find((item) => Number(item.total || 0) > 0);
   const sponsorDistribution = data.sponsorDistribution || [];
   const sponsorTotal = sponsorDistribution.reduce((sum, item) => sum + Number(item.total || 0), 0) || 0;
+  const companyDistribution = data.companyDistribution || [];
+  const companyTotal = companyDistribution.reduce((sum, item) => sum + Number(item.total || 0), 0) || 0;
+  const companyChartData = companyDistribution.slice(0, 12);
   const classModalityDistribution = data.classModalityDistribution || data.attendanceDistribution || [];
   const modalityTotal = classModalityDistribution.reduce((sum, item) => sum + Number(item.total || 0), 0) || 0;
   const onlineTotal = classModalityDistribution.find((item) => item.modalidade === 'Online')?.total || 0;
@@ -115,6 +133,7 @@ export default function Dashboard() {
         <StatCard icon={BookOpenCheck} label="Curso mais realizado" value={topCourse?.total || 0} tone="slate" hint={topCourse?.nome || 'Sem turmas'} />
         <StatCard icon={UsersRound} label="Alunos presenciais" value={presencialTotal} tone="orange" hint={`${modalityTotal || 0} classificados`} />
         <StatCard icon={Monitor} label="Alunos online" value={onlineTotal} tone="blue" hint={`${modalityTotal || 0} classificados`} />
+        <StatCard icon={BriefcaseBusiness} label="Empresas clientes" value={companyDistribution.length} tone="green" hint={`${companyTotal} alunos empresariais`} />
       </section>
 
       <section className="dashboard-grid">
@@ -204,6 +223,35 @@ export default function Dashboard() {
             </div>
           ) : (
             <EmptyState title="Sem distribuicao" description="Vincule alunos a turmas para comparar Empresa e Particular." />
+          )}
+        </article>
+      </section>
+
+      <section className="dashboard-grid single-panel-grid">
+        <article className="panel">
+          <div className="panel-heading">
+            <h2>Distribuição de empresas clientes</h2>
+            <span>Top {companyChartData.length || 0} por participação na base empresarial</span>
+          </div>
+          {companyChartData.length ? (
+            <div className="chart-box company-distribution-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={companyChartData} layout="vertical" margin={{ top: 8, right: 46, bottom: 8, left: 36 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" dataKey="percentual" tickFormatter={formatPercent} />
+                  <YAxis type="category" dataKey="empresa" width={150} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CompanyDistributionTooltip />} />
+                  <Bar dataKey="percentual" radius={[0, 6, 6, 0]}>
+                    {companyChartData.map((item, index) => (
+                      <Cell key={item.empresa} fill={companyColors[index % companyColors.length]} />
+                    ))}
+                    <LabelList dataKey="percentual" position="right" formatter={formatPercent} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Sem empresas" description="Vincule alunos a empresas para acompanhar a distribuição dos clientes." />
           )}
         </article>
       </section>

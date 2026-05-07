@@ -285,12 +285,14 @@ classRoutes.get(
               COUNT(ta.id) AS total_alunos,
               COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Presencial%' THEN ta.aluno_id END), 0) AS alunos_presenciais,
               COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Online%' THEN ta.aluno_id END), 0) AS alunos_online,
-              COALESCE(SUM(CASE WHEN ta.status LIKE 'Conclu%' THEN 1 ELSE 0 END), 0) AS alunos_concluidos
+              COALESCE(SUM(CASE WHEN ta.status LIKE 'Conclu%' THEN 1 ELSE 0 END), 0) AS alunos_concluidos,
+              COALESCE(COUNT(DISTINCT av.id), 0) AS avaliacoes_recebidas
        FROM turmas t
        JOIN cursos c ON c.id = t.curso_id
        JOIN instrutores i ON i.id = t.instrutor_id
        LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
        LEFT JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+       LEFT JOIN avaliacoes av ON av.turma_id = t.id AND av.aluno_id = ta.aluno_id
        ${where}
        GROUP BY t.id
        ORDER BY DATE(t.data_inicio) DESC`,

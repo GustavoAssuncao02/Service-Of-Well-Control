@@ -69,6 +69,38 @@ function StudentBrowserItem({ active, student, detail, onSelect, onOpenProfile }
   );
 }
 
+function preferredItem(items, documentKey = 'total_documentos') {
+  return items.find((item) => Number(item[documentKey] || 0) > 0) || items[0];
+}
+
+function getAutoSelection(current, nextData) {
+  if (!current.year && nextData.years?.length) {
+    const year = preferredItem(nextData.years);
+    return { year: String(year.year), month: '', classId: '', studentId: '' };
+  }
+
+  if (current.year && !current.month && nextData.months?.length) {
+    const month = preferredItem(nextData.months);
+    return { ...current, month: String(month.month), classId: '', studentId: '' };
+  }
+
+  if (current.year && current.month && !current.classId && nextData.classes?.length) {
+    const turma = preferredItem(nextData.classes);
+    return { ...current, classId: String(turma.id), studentId: '' };
+  }
+
+  if (current.classId && !current.studentId && nextData.students?.length) {
+    const student = preferredItem(nextData.students, 'total_documentos_turma');
+    return { ...current, studentId: String(student.id) };
+  }
+
+  return current;
+}
+
+function sameSelection(left, right) {
+  return left.year === right.year && left.month === right.month && left.classId === right.classId && left.studentId === right.studentId;
+}
+
 export default function DocumentBrowser() {
   const navigate = useNavigate();
   const [selection, setSelection] = useState({
@@ -96,7 +128,13 @@ export default function DocumentBrowser() {
     api
       .get('/students/document-browser', { params })
       .then((response) => {
-        if (active) setData(response.data);
+        if (!active) return;
+
+        setData(response.data);
+        setSelection((current) => {
+          const nextSelection = getAutoSelection(current, response.data);
+          return sameSelection(current, nextSelection) ? current : nextSelection;
+        });
       })
       .catch((err) => {
         if (active) setError(getApiError(err));

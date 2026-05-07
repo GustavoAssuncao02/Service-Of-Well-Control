@@ -59,6 +59,23 @@ dashboardRoutes.get(
        ORDER BY total DESC`
     );
 
+    const companyRows = await db.all(
+      `SELECT empresa, COUNT(*) AS total
+       FROM (
+         SELECT COALESCE(e.nome, NULLIF(TRIM(a.empresa), '')) AS empresa
+         FROM alunos a
+         LEFT JOIN empresas e ON e.id = a.empresa_id
+       ) company_base
+       WHERE empresa IS NOT NULL
+       GROUP BY empresa
+       ORDER BY total DESC, empresa ASC`
+    );
+    const companyTotal = companyRows.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const companyDistribution = companyRows.map((item) => ({
+      ...item,
+      percentual: companyTotal ? Number(((Number(item.total || 0) * 100) / companyTotal).toFixed(2)) : 0
+    }));
+
     const classModalityDistribution = await db.all(
       `SELECT cp.nome AS modalidade, COUNT(DISTINCT ta.aluno_id) AS total
        FROM turma_alunos ta
@@ -108,6 +125,7 @@ dashboardRoutes.get(
       courseDistribution,
       courseFrequency,
       sponsorDistribution,
+      companyDistribution,
       classModalityDistribution,
       classModalityUsage,
       attendanceDistribution: classModalityDistribution,

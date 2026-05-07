@@ -306,7 +306,7 @@ evaluationRoutes.get(
       `SELECT DISTINCT teste_zoom AS value
        FROM avaliacoes
        WHERE teste_zoom IS NOT NULL AND TRIM(teste_zoom) <> ''
-       ORDER BY FIELD(teste_zoom, 'Sim', 'NÃ£o'), teste_zoom ASC`
+       ORDER BY FIELD(teste_zoom, 'Sim', 'Não'), teste_zoom ASC`
     );
 
     res.json({
