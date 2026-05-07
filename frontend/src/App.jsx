@@ -25,6 +25,7 @@ import StudentHome from './pages/StudentHome.jsx';
 import StudentDetails from './pages/StudentDetails.jsx';
 import StudentReport from './pages/StudentReport.jsx';
 import Students from './pages/Students.jsx';
+import UserArea from './pages/UserArea.jsx';
 import UsersPage from './pages/UsersPage.jsx';
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
       <Route element={<ProtectedRoute role="admin" />}>
         <Route path="/admin" element={<Layout />}>
           <Route index element={<Calendar />} />
+          <Route path="area-usuario" element={<UserArea />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="perfil" element={<Profile />} />
           <Route path="empresas" element={<Companies />} />

@@ -30,6 +30,8 @@ export const env = {
   googleDriveParentFolderId: process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID || '',
   googleDriveStudentsFolderId: process.env.GOOGLE_DRIVE_STUDENTS_FOLDER_ID || '',
   googleDriveStudentsFolderName: process.env.GOOGLE_DRIVE_STUDENTS_FOLDER_NAME || 'Alunos',
+  googleDriveUserAreaFolderId: process.env.GOOGLE_DRIVE_USER_AREA_FOLDER_ID || '',
+  googleDriveUserAreaFolderName: process.env.GOOGLE_DRIVE_USER_AREA_FOLDER_NAME || 'Usuarios',
   googleDriveMakeFilesPublic: process.env.GOOGLE_DRIVE_MAKE_FILES_PUBLIC === 'true',
   googleDriveDeleteFiles: process.env.GOOGLE_DRIVE_DELETE_FILES !== 'false',
   googleDriveMaxUploadMb: Number(process.env.GOOGLE_DRIVE_MAX_UPLOAD_MB || 25) || 25

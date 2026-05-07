@@ -9,6 +9,7 @@ const driveScopes = ['https://www.googleapis.com/auth/drive'];
 
 let driveClientPromise;
 let studentsRootFolderPromise;
+let userAreaRootFolderPromise;
 
 function createHttpError(message, status = 500) {
   const error = new Error(message);
@@ -181,6 +182,35 @@ async function getStudentsRootFolder(drive) {
   return studentsRootFolderPromise;
 }
 
+async function getUserAreaRootFolder(drive) {
+  if (env.googleDriveUserAreaFolderId) {
+    return {
+      id: env.googleDriveUserAreaFolderId,
+      name: env.googleDriveUserAreaFolderName
+    };
+  }
+
+  if (!userAreaRootFolderPromise) {
+    userAreaRootFolderPromise = findOrCreateFolder(
+      drive,
+      env.googleDriveUserAreaFolderName,
+      env.googleDriveParentFolderId
+    );
+  }
+
+  return userAreaRootFolderPromise;
+}
+
+function userAreaFolderName({ userId, userName }) {
+  const name = String(userName || 'Usuario').trim() || 'Usuario';
+  return `${name} - Usuario ${userId}`;
+}
+
+async function getUserDriveFolder(drive, user) {
+  const userAreaRootFolder = await getUserAreaRootFolder(drive);
+  return findOrCreateFolder(drive, userAreaFolderName(user), userAreaRootFolder.id);
+}
+
 async function makeFilePublic(drive, fileId) {
   await drive.permissions.create({
     fileId,
@@ -221,6 +251,48 @@ export async function uploadStudentDocumentToDrive({ studentName, classFolderNam
     fileId: data.id,
     fileName: data.name,
     folderId: targetFolder.id,
+    url: data.webViewLink
+  };
+}
+
+export async function createUserAreaFolderOnDrive({ userId, userName, folderName }) {
+  const drive = await getDriveClient();
+  const userFolder = await getUserDriveFolder(drive, { userId, userName });
+  const folder = await createFolder(drive, folderName, userFolder.id);
+
+  return {
+    folderId: folder.id,
+    folderName: folder.name,
+    url: folder.webViewLink
+  };
+}
+
+export async function uploadUserAreaFileToDrive({ userId, userName, folderDriveId, file }) {
+  const drive = await getDriveClient();
+  const userFolder = folderDriveId ? null : await getUserDriveFolder(drive, { userId, userName });
+  const targetFolderId = folderDriveId || userFolder.id;
+
+  const { data } = await drive.files.create({
+    requestBody: {
+      name: file.originalname,
+      parents: [targetFolderId]
+    },
+    media: {
+      mimeType: file.mimetype || 'application/octet-stream',
+      body: Readable.from(file.buffer)
+    },
+    fields: 'id, name, webViewLink',
+    supportsAllDrives: true
+  });
+
+  if (env.googleDriveMakeFilesPublic) {
+    await makeFilePublic(drive, data.id);
+  }
+
+  return {
+    fileId: data.id,
+    fileName: data.name,
+    folderId: targetFolderId,
     url: data.webViewLink
   };
 }

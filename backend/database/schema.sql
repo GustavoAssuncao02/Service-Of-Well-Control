@@ -15,6 +15,57 @@ CREATE TABLE IF NOT EXISTS usuarios (
   UNIQUE KEY uq_usuarios_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS usuario_pastas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  nome VARCHAR(191) NOT NULL,
+  drive_folder_id VARCHAR(191),
+  drive_url TEXT,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_usuario_pastas_usuario_nome (usuario_id, nome),
+  INDEX idx_usuario_pastas_usuario_id (usuario_id),
+  INDEX idx_usuario_pastas_drive_folder_id (drive_folder_id),
+  CONSTRAINT fk_usuario_pastas_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS usuario_arquivos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  pasta_id INT,
+  nome_arquivo VARCHAR(255) NOT NULL,
+  tipo_arquivo VARCHAR(120),
+  tamanho_bytes BIGINT,
+  drive_file_id VARCHAR(191),
+  drive_folder_id VARCHAR(191),
+  drive_url TEXT,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_usuario_arquivos_usuario_id (usuario_id),
+  INDEX idx_usuario_arquivos_pasta_id (pasta_id),
+  INDEX idx_usuario_arquivos_drive_file_id (drive_file_id),
+  CONSTRAINT fk_usuario_arquivos_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_usuario_arquivos_pasta
+    FOREIGN KEY (pasta_id) REFERENCES usuario_pastas(id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS usuario_notas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  titulo VARCHAR(191) NOT NULL,
+  conteudo TEXT,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_usuario_notas_usuario_id (usuario_id),
+  CONSTRAINT fk_usuario_notas_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS empresas (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nome VARCHAR(191) NOT NULL,

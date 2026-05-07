@@ -92,6 +92,8 @@ GOOGLE_DRIVE_CREDENTIALS_FILE=
 GOOGLE_DRIVE_PARENT_FOLDER_ID=
 GOOGLE_DRIVE_STUDENTS_FOLDER_ID=
 GOOGLE_DRIVE_STUDENTS_FOLDER_NAME=Alunos
+GOOGLE_DRIVE_USER_AREA_FOLDER_ID=
+GOOGLE_DRIVE_USER_AREA_FOLDER_NAME=Usuarios
 GOOGLE_DRIVE_MAKE_FILES_PUBLIC=false
 GOOGLE_DRIVE_DELETE_FILES=true
 GOOGLE_DRIVE_MAX_UPLOAD_MB=25
@@ -104,6 +106,8 @@ Use apenas uma das opcoes de credenciais:
 - `GOOGLE_DRIVE_AUTH_TYPE=oauth`: usa um OAuth Client com `GOOGLE_DRIVE_OAUTH_CLIENT_FILE` e `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`.
 
 Se `GOOGLE_DRIVE_STUDENTS_FOLDER_ID` ficar vazio, o sistema procura ou cria a pasta `Alunos`. Dentro dela, cria uma pasta por aluno com o nome completo do estudante.
+
+Se `GOOGLE_DRIVE_USER_AREA_FOLDER_ID` ficar vazio, a area do usuario procura ou cria a pasta `Usuarios`. Dentro dela, cria uma pasta propria para cada usuario autenticado.
 
 Para gerar o refresh token no modo OAuth:
 

@@ -6,6 +6,7 @@ import {
   Cake,
   ClipboardCheck,
   FileSearch,
+  Folder,
   GraduationCap,
   History,
   LayoutDashboard,
@@ -27,6 +28,7 @@ import BirthdayLoginToast from './BirthdayLoginToast.jsx';
 import SwcLogo from './SwcLogo.jsx';
 
 const navItems = [
+  { to: '/admin/area-usuario', label: 'Area do usuario', icon: Folder },
   { to: '/admin', label: 'Calendário', icon: CalendarDays },
   { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/empresas', label: 'Empresas', icon: Building2 },
