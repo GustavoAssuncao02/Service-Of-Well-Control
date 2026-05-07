@@ -624,26 +624,6 @@ studentRoutes.get(
   '/document-browser',
   asyncHandler(async (req, res) => {
     const db = await getDb();
-    const selectedYear = req.query.year ? Number(req.query.year) : null;
-    const selectedMonth = req.query.month ? Number(req.query.month) : null;
-    const selectedClassId = req.query.classId ? Number(req.query.classId) : null;
-    const selectedStudentId = req.query.studentId ? Number(req.query.studentId) : null;
-
-    if (selectedYear && (!Number.isInteger(selectedYear) || selectedYear < 2000 || selectedYear > 2100)) {
-      return res.status(400).json({ message: 'Ano invalido.' });
-    }
-
-    if (selectedMonth && (!Number.isInteger(selectedMonth) || selectedMonth < 1 || selectedMonth > 12)) {
-      return res.status(400).json({ message: 'Mes invalido.' });
-    }
-
-    if (selectedClassId && (!Number.isInteger(selectedClassId) || selectedClassId <= 0)) {
-      return res.status(400).json({ message: 'Turma invalida.' });
-    }
-
-    if (selectedStudentId && (!Number.isInteger(selectedStudentId) || selectedStudentId <= 0)) {
-      return res.status(400).json({ message: 'Aluno invalido.' });
-    }
 
     const years = await db.all(
       `SELECT YEAR(t.data_inicio) AS ano,
@@ -655,122 +635,67 @@ studentRoutes.get(
        ORDER BY ano DESC`
     );
 
-    const months = selectedYear
-      ? await db.all(
-          `SELECT MONTH(t.data_inicio) AS mes,
-                  COUNT(DISTINCT t.id) AS total_turmas,
-                  COUNT(DISTINCT ad.id) AS total_documentos
-           FROM turmas t
-           LEFT JOIN aluno_documentos ad ON ad.turma_id = t.id
-           WHERE YEAR(t.data_inicio) = ?
-           GROUP BY MONTH(t.data_inicio)
-           ORDER BY mes ASC`,
-          selectedYear
-        )
-      : [];
+    const months = await db.all(
+      `SELECT YEAR(t.data_inicio) AS ano,
+              MONTH(t.data_inicio) AS mes,
+              COUNT(DISTINCT t.id) AS total_turmas,
+              COUNT(DISTINCT ad.id) AS total_documentos
+       FROM turmas t
+       LEFT JOIN aluno_documentos ad ON ad.turma_id = t.id
+       GROUP BY YEAR(t.data_inicio), MONTH(t.data_inicio)
+       ORDER BY ano DESC, mes ASC`
+    );
 
-    const classes =
-      selectedYear && selectedMonth
-        ? await db.all(
-            `SELECT t.id, t.data_inicio, t.data_fim, t.local, t.sala_online, t.status,
-                    c.nome AS curso_nome,
-                    i.nome AS instrutor_nome,
-                    COUNT(DISTINCT ta.aluno_id) AS total_alunos,
-                    COUNT(DISTINCT ad.id) AS total_documentos
-             FROM turmas t
-             JOIN cursos c ON c.id = t.curso_id
-             JOIN instrutores i ON i.id = t.instrutor_id
-             LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
-             LEFT JOIN aluno_documentos ad ON ad.turma_id = t.id
-             WHERE YEAR(t.data_inicio) = ?
-               AND MONTH(t.data_inicio) = ?
-             GROUP BY t.id
-             ORDER BY DATE(t.data_inicio) ASC, c.nome ASC`,
-            selectedYear,
-            selectedMonth
-          )
-        : [];
+    const classes = await db.all(
+      `SELECT t.id, YEAR(t.data_inicio) AS ano, MONTH(t.data_inicio) AS mes,
+              t.data_inicio, t.data_fim, t.local, t.sala_online, t.status,
+              c.nome AS curso_nome,
+              i.nome AS instrutor_nome,
+              COUNT(DISTINCT ta.aluno_id) AS total_alunos,
+              COUNT(DISTINCT ad.id) AS total_documentos
+       FROM turmas t
+       JOIN cursos c ON c.id = t.curso_id
+       JOIN instrutores i ON i.id = t.instrutor_id
+       LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
+       LEFT JOIN aluno_documentos ad ON ad.turma_id = t.id
+       GROUP BY t.id
+       ORDER BY DATE(t.data_inicio) ASC, c.nome ASC`
+    );
 
-    let students = [];
-    let documents = [];
-    let selectedClass = null;
-    let selectedStudent = null;
+    const students = await db.all(
+      `SELECT ta.turma_id,
+              a.id, a.nome_completo, a.cpf, a.email, a.telefone,
+              ta.status AS status_turma,
+              ta.classificacao_presenca_id AS modalidade_aula_id,
+              cp.nome AS modalidade_aula_nome,
+              ta.classificacao_presenca_id,
+              cp.nome AS classificacao_presenca_nome,
+              COUNT(DISTINCT all_docs.id) AS total_documentos,
+              COUNT(DISTINCT class_docs.id) AS total_documentos_turma
+       FROM turma_alunos ta
+       JOIN alunos a ON a.id = ta.aluno_id
+       JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+       LEFT JOIN aluno_documentos all_docs ON all_docs.aluno_id = a.id
+       LEFT JOIN aluno_documentos class_docs
+         ON class_docs.aluno_id = a.id
+        AND class_docs.turma_id = ta.turma_id
+       GROUP BY ta.turma_id, a.id, ta.status, ta.classificacao_presenca_id, cp.nome
+       ORDER BY a.nome_completo ASC`
+    );
 
-    if (selectedClassId) {
-      selectedClass = await db.get(
-        `SELECT t.id, t.data_inicio, t.data_fim, t.local, t.sala_online, t.status,
-                c.nome AS curso_nome,
-                i.nome AS instrutor_nome
-         FROM turmas t
-         JOIN cursos c ON c.id = t.curso_id
-         JOIN instrutores i ON i.id = t.instrutor_id
-         WHERE t.id = ?`,
-        selectedClassId
-      );
-
-      if (!selectedClass) {
-        return res.status(404).json({ message: 'Turma nao encontrada.' });
-      }
-
-      students = await db.all(
-        `SELECT a.id, a.nome_completo, a.cpf, a.email, a.telefone,
-                ta.status AS status_turma,
-                ta.classificacao_presenca_id AS modalidade_aula_id,
-                cp.nome AS modalidade_aula_nome,
-                ta.classificacao_presenca_id,
-                cp.nome AS classificacao_presenca_nome,
-                COUNT(DISTINCT all_docs.id) AS total_documentos,
-                COUNT(DISTINCT class_docs.id) AS total_documentos_turma
-         FROM turma_alunos ta
-         JOIN alunos a ON a.id = ta.aluno_id
-         JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
-         LEFT JOIN aluno_documentos all_docs ON all_docs.aluno_id = a.id
-         LEFT JOIN aluno_documentos class_docs
-           ON class_docs.aluno_id = a.id
-          AND class_docs.turma_id = ta.turma_id
-         WHERE ta.turma_id = ?
-         GROUP BY a.id, ta.status, ta.classificacao_presenca_id, cp.nome
-         ORDER BY a.nome_completo ASC`,
-        selectedClassId
-      );
-    }
-
-    if (selectedClassId && selectedStudentId) {
-      selectedStudent = await db.get(
-        `SELECT a.id, a.nome_completo, a.cpf, a.email, a.telefone
-         FROM turma_alunos ta
-         JOIN alunos a ON a.id = ta.aluno_id
-         WHERE ta.turma_id = ?
-           AND ta.aluno_id = ?`,
-        selectedClassId,
-        selectedStudentId
-      );
-
-      if (!selectedStudent) {
-        return res.status(404).json({ message: 'Aluno nao encontrado nesta turma.' });
-      }
-
-      documents = await db.all(
-        `${studentDocumentsQuery('WHERE ad.aluno_id = ? AND ad.turma_id = ?')}
-         ORDER BY ad.criado_em DESC, ad.id DESC`,
-        selectedStudentId,
-        selectedClassId
-      );
-    }
+    const documents = await db.all(
+      `${studentDocumentsQuery('')}
+       ORDER BY ad.criado_em DESC, ad.id DESC`
+    );
 
     res.json({
-      selection: {
-        year: selectedYear,
-        month: selectedMonth,
-        classId: selectedClassId,
-        studentId: selectedStudentId
-      },
       years: years.map((row) => ({
         year: Number(row.ano),
         total_turmas: Number(row.total_turmas || 0),
         total_documentos: Number(row.total_documentos || 0)
       })),
       months: months.map((row) => ({
+        year: Number(row.ano),
         month: Number(row.mes),
         label: monthName(row.mes),
         total_turmas: Number(row.total_turmas || 0),
@@ -778,9 +703,7 @@ studentRoutes.get(
       })),
       classes,
       students,
-      documents,
-      selectedClass,
-      selectedStudent
+      documents
     });
   })
 );

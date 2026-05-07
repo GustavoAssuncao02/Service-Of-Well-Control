@@ -11,9 +11,7 @@ const emptyData = {
   months: [],
   classes: [],
   students: [],
-  documents: [],
-  selectedClass: null,
-  selectedStudent: null
+  documents: []
 };
 
 function documentCountLabel(total) {
@@ -69,38 +67,6 @@ function StudentBrowserItem({ active, student, detail, onSelect, onOpenProfile }
   );
 }
 
-function preferredItem(items, documentKey = 'total_documentos') {
-  return items.find((item) => Number(item[documentKey] || 0) > 0) || items[0];
-}
-
-function getAutoSelection(current, nextData) {
-  if (!current.year && nextData.years?.length) {
-    const year = preferredItem(nextData.years);
-    return { year: String(year.year), month: '', classId: '', studentId: '' };
-  }
-
-  if (current.year && !current.month && nextData.months?.length) {
-    const month = preferredItem(nextData.months);
-    return { ...current, month: String(month.month), classId: '', studentId: '' };
-  }
-
-  if (current.year && current.month && !current.classId && nextData.classes?.length) {
-    const turma = preferredItem(nextData.classes);
-    return { ...current, classId: String(turma.id), studentId: '' };
-  }
-
-  if (current.classId && !current.studentId && nextData.students?.length) {
-    const student = preferredItem(nextData.students, 'total_documentos_turma');
-    return { ...current, studentId: String(student.id) };
-  }
-
-  return current;
-}
-
-function sameSelection(left, right) {
-  return left.year === right.year && left.month === right.month && left.classId === right.classId && left.studentId === right.studentId;
-}
-
 export default function DocumentBrowser() {
   const navigate = useNavigate();
   const [selection, setSelection] = useState({
@@ -115,26 +81,14 @@ export default function DocumentBrowser() {
 
   useEffect(() => {
     let active = true;
-    const params = {};
-
-    if (selection.year) params.year = selection.year;
-    if (selection.month) params.month = selection.month;
-    if (selection.classId) params.classId = selection.classId;
-    if (selection.studentId) params.studentId = selection.studentId;
 
     setLoading(true);
     setError('');
 
     api
-      .get('/students/document-browser', { params })
+      .get('/students/document-browser')
       .then((response) => {
-        if (!active) return;
-
-        setData(response.data);
-        setSelection((current) => {
-          const nextSelection = getAutoSelection(current, response.data);
-          return sameSelection(current, nextSelection) ? current : nextSelection;
-        });
+        if (active) setData(response.data);
       })
       .catch((err) => {
         if (active) setError(getApiError(err));
@@ -146,12 +100,43 @@ export default function DocumentBrowser() {
     return () => {
       active = false;
     };
-  }, [selection]);
+  }, []);
 
-  const selectedYear = useMemo(() => data.years.find((item) => String(item.year) === String(selection.year)), [data.years, selection.year]);
-  const selectedMonth = useMemo(() => data.months.find((item) => String(item.month) === String(selection.month)), [data.months, selection.month]);
-  const selectedClass = data.selectedClass || data.classes.find((item) => String(item.id) === String(selection.classId));
-  const selectedStudent = data.selectedStudent || data.students.find((item) => String(item.id) === String(selection.studentId));
+  const filteredMonths = useMemo(
+    () => data.months.filter((item) => String(item.year) === String(selection.year)),
+    [data.months, selection.year]
+  );
+  const selectedMonth = useMemo(
+    () => filteredMonths.find((item) => String(item.month) === String(selection.month)),
+    [filteredMonths, selection.month]
+  );
+  const filteredClasses = useMemo(
+    () =>
+      data.classes.filter(
+        (item) =>
+          String(item.ano) === String(selection.year) &&
+          String(item.mes) === String(selection.month)
+      ),
+    [data.classes, selection.year, selection.month]
+  );
+  const selectedClass = useMemo(() => data.classes.find((item) => String(item.id) === String(selection.classId)), [data.classes, selection.classId]);
+  const filteredStudents = useMemo(
+    () => data.students.filter((item) => String(item.turma_id) === String(selection.classId)),
+    [data.students, selection.classId]
+  );
+  const selectedStudent = useMemo(
+    () => filteredStudents.find((item) => String(item.id) === String(selection.studentId)),
+    [filteredStudents, selection.studentId]
+  );
+  const filteredDocuments = useMemo(
+    () =>
+      data.documents.filter(
+        (item) =>
+          String(item.turma_id) === String(selection.classId) &&
+          String(item.aluno_id) === String(selection.studentId)
+      ),
+    [data.documents, selection.classId, selection.studentId]
+  );
 
   function selectYear(year) {
     setSelection({ year: String(year), month: '', classId: '', studentId: '' });
@@ -224,11 +209,11 @@ export default function DocumentBrowser() {
               <strong>Meses</strong>
             </div>
             {selection.year ? (
-              data.months.length ? (
+              filteredMonths.length ? (
                 <div className="browser-list">
-                  {data.months.map((month) => (
+                  {filteredMonths.map((month) => (
                     <BrowserItem
-                      key={month.month}
+                      key={`${month.year}-${month.month}`}
                       active={String(selection.month) === String(month.month)}
                       icon={String(selection.month) === String(month.month) ? FolderOpen : Folder}
                       title={month.label}
@@ -252,9 +237,9 @@ export default function DocumentBrowser() {
               <strong>Turmas</strong>
             </div>
             {selection.year && selection.month ? (
-              data.classes.length ? (
+              filteredClasses.length ? (
                 <div className="browser-list">
-                  {data.classes.map((turma) => (
+                  {filteredClasses.map((turma) => (
                     <BrowserItem
                       key={turma.id}
                       active={String(selection.classId) === String(turma.id)}
@@ -280,11 +265,11 @@ export default function DocumentBrowser() {
               <strong>Funcionários</strong>
             </div>
             {selection.classId ? (
-              data.students.length ? (
+              filteredStudents.length ? (
                 <div className="browser-list">
-                  {data.students.map((student) => (
+                  {filteredStudents.map((student) => (
                     <StudentBrowserItem
-                      key={student.id}
+                      key={`${student.turma_id}-${student.id}`}
                       active={String(selection.studentId) === String(student.id)}
                       student={student}
                       detail={`${documentCountLabel(student.total_documentos)} ligados ao aluno, ${documentCountLabel(student.total_documentos_turma)} nesta turma`}
@@ -307,9 +292,9 @@ export default function DocumentBrowser() {
               <strong>Arquivos</strong>
             </div>
             {selection.studentId ? (
-              data.documents.length ? (
+              filteredDocuments.length ? (
                 <div className="browser-file-list">
-                  {data.documents.map((document) => (
+                  {filteredDocuments.map((document) => (
                     <div key={document.id} className="browser-file-row">
                       <FileText size={20} />
                       <div>
