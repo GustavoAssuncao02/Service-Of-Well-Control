@@ -53,7 +53,7 @@ export const env = {
   adminName: envValue('ADMIN_NAME') || 'Administrador SWC',
   adminEmail: envValue('ADMIN_EMAIL') || 'admin@swc.com',
   adminPassword: envValue('ADMIN_PASSWORD') || 'admin123',
-  googleDriveEnabled: envBoolean('GOOGLE_DRIVE_ENABLED', googleDriveConfigured),
+  googleDriveEnabled: envBoolean('GOOGLE_DRIVE_ENABLED') || googleDriveConfigured,
   googleDriveAuthType,
   googleDriveCredentialsJson,
   googleDriveCredentialsFile,

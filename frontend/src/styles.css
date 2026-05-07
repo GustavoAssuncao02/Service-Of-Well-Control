@@ -2243,6 +2243,48 @@ td small {
   margin-top: 18px;
 }
 
+.saved-files-filter {
+  margin: 0 0 18px;
+}
+
+.folder-strip-compact {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.folder-summary-item {
+  min-height: 64px;
+  padding: 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-mid);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+}
+
+.folder-summary-item svg {
+  grid-row: span 2;
+  color: var(--blue-dark);
+}
+
+.folder-summary-item span,
+.folder-summary-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-summary-item span {
+  font-weight: 800;
+}
+
+.folder-summary-item small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .folder-filter-button {
   border: 1.5px solid var(--line);
   border-radius: var(--r);
@@ -2292,7 +2334,7 @@ td small {
 }
 
 .user-note-textarea {
-  min-height: 190px;
+  min-height: 120px;
 }
 
 .note-card {

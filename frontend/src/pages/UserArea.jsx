@@ -252,30 +252,17 @@ export default function UserArea() {
               </button>
             </form>
 
-            <div className="folder-strip">
-              <button className={`folder-filter-button ${selectedFolderId === 'all' ? 'active' : ''}`} type="button" onClick={() => setSelectedFolderId('all')}>
-                <FolderOpen size={18} />
-                <span>Todos</span>
-                <small>{folderCountLabel(area.files.length)}</small>
-              </button>
-              <button className={`folder-filter-button ${selectedFolderId === 'root' ? 'active' : ''}`} type="button" onClick={() => setSelectedFolderId('root')}>
-                <Folder size={18} />
-                <span>Sem pasta</span>
-                <small>{folderCountLabel(area.files.filter((file) => !file.pasta_id).length)}</small>
-              </button>
-              {area.folders.map((folder) => (
-                <button
-                  key={folder.id}
-                  className={`folder-filter-button ${String(selectedFolderId) === String(folder.id) ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setSelectedFolderId(String(folder.id))}
-                >
-                  <Folder size={18} />
-                  <span>{folder.nome}</span>
-                  <small>{folderCountLabel(folder.total_arquivos)}</small>
-                </button>
-              ))}
-            </div>
+            {area.folders.length ? (
+              <div className="folder-strip folder-strip-compact">
+                {area.folders.map((folder) => (
+                  <div key={folder.id} className="folder-summary-item">
+                    <Folder size={18} />
+                    <span>{folder.nome}</span>
+                    <small>{folderCountLabel(folder.total_arquivos)}</small>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </article>
 
           <article className="panel">
@@ -314,6 +301,31 @@ export default function UserArea() {
             <div className="panel-heading">
               <h2>Arquivos salvos</h2>
               <span>{filteredFiles.length} arquivo(s)</span>
+            </div>
+
+            <div className="folder-strip saved-files-filter">
+              <button className={`folder-filter-button ${selectedFolderId === 'all' ? 'active' : ''}`} type="button" onClick={() => setSelectedFolderId('all')}>
+                <FolderOpen size={18} />
+                <span>Todos os arquivos</span>
+                <small>{folderCountLabel(area.files.length)}</small>
+              </button>
+              <button className={`folder-filter-button ${selectedFolderId === 'root' ? 'active' : ''}`} type="button" onClick={() => setSelectedFolderId('root')}>
+                <Folder size={18} />
+                <span>Arquivos sem pasta</span>
+                <small>{folderCountLabel(area.files.filter((file) => !file.pasta_id).length)}</small>
+              </button>
+              {area.folders.map((folder) => (
+                <button
+                  key={folder.id}
+                  className={`folder-filter-button ${String(selectedFolderId) === String(folder.id) ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setSelectedFolderId(String(folder.id))}
+                >
+                  <Folder size={18} />
+                  <span>{folder.nome}</span>
+                  <small>{folderCountLabel(folder.total_arquivos)}</small>
+                </button>
+              ))}
             </div>
 
             {filteredFiles.length ? (
