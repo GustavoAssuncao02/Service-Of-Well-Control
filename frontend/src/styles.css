@@ -36,7 +36,7 @@
 
   /* Visual density */
   --app-zoom: 1;
-  --app-zoom-inverse: 100%;
+  --app-layout-width: 100vw;
   --app-viewport-height: 100vh;
 
   font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
@@ -62,12 +62,12 @@ img { max-width: 100%; }
 @media (min-width: 761px) {
   :root {
     --app-zoom: 0.8;
-    --app-zoom-inverse: 125%;
+    --app-layout-width: calc(100vw / var(--app-zoom));
     --app-viewport-height: 125vh;
   }
 
   #root {
-    width: var(--app-zoom-inverse);
+    width: var(--app-layout-width);
     min-height: var(--app-viewport-height);
     zoom: var(--app-zoom);
   }
@@ -892,7 +892,7 @@ input[readonly] {
   .modal-backdrop {
     right: auto;
     bottom: auto;
-    width: 125vw;
+    width: var(--app-layout-width);
     min-height: var(--app-viewport-height);
   }
 }
