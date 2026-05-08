@@ -30,7 +30,17 @@ const __dirname = path.dirname(__filename);
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 const frontendIndexPath = path.join(frontendDistPath, 'index.html');
 
-await initializeDatabase();
+try {
+  await initializeDatabase();
+} catch (error) {
+  console.error('Falha ao inicializar o banco de dados.');
+  console.error(`Conexao configurada: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
+  console.error(
+    'No Render, configure DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET e ADMIN_PASSWORD nas Environment Variables.'
+  );
+  console.error(error);
+  process.exit(1);
+}
 
 const app = express();
 
