@@ -1,5 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { env } from './config/env.js';
 import { initializeDatabase } from './database/init.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -21,6 +24,11 @@ import { calendarRoutes } from './routes/calendar.routes.js';
 import { historyRoutes } from './routes/history.routes.js';
 import { userAreaRoutes } from './routes/userArea.routes.js';
 import { driveRoutes } from './routes/drive.routes.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
+const frontendIndexPath = path.join(frontendDistPath, 'index.html');
 
 await initializeDatabase();
 
@@ -72,9 +80,20 @@ app.use('/api/history', historyRoutes);
 app.use('/api/user-area', userAreaRoutes);
 app.use('/api/drive', driveRoutes);
 
-app.use((req, res) => {
+app.use('/api', (req, res) => {
   res.status(404).json({ message: 'Rota não encontrada.' });
 });
+
+if (fs.existsSync(frontendIndexPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res) => {
+    res.sendFile(frontendIndexPath);
+  });
+} else {
+  app.use((req, res) => {
+    res.status(404).json({ message: 'Rota não encontrada.' });
+  });
+}
 
 app.use(errorHandler);
 

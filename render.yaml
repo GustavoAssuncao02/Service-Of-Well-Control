@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: service-of-well-control
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run install:all && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 14d
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: 3306
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: ADMIN_NAME
+        value: Administrador SWC
+      - key: ADMIN_EMAIL
+        value: admin@swc.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: GOOGLE_DRIVE_ENABLED
+        value: false

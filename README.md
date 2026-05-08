@@ -52,6 +52,31 @@ Frontend: http://localhost:5173
 
 Backend: http://localhost:3333/api
 
+## Deploy no Render
+
+Este projeto pode subir em um unico Web Service no Render. O backend serve a API em `/api` e tambem publica o build do frontend.
+
+Use estes comandos no Render, caso nao use o `render.yaml`:
+
+```bash
+Build Command: npm install && npm run install:all && npm run build
+Start Command: npm start
+```
+
+Variaveis obrigatorias no Render:
+
+```env
+DB_HOST=
+DB_PORT=3306
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
+JWT_SECRET=
+ADMIN_PASSWORD=
+```
+
+Importante: o Render nao fornece MySQL local em `localhost`. Use um MySQL externo e preencha as variaveis acima no painel do Render.
+
 ## Admin inicial
 
 O banco cria automaticamente um usuario administrador:

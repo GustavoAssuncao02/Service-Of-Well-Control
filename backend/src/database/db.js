@@ -62,12 +62,40 @@ async function ensureDatabaseExists() {
     throw error;
   }
 
-  await serverConnection.query(
-    `CREATE DATABASE IF NOT EXISTS \`${env.dbName}\`
-     CHARACTER SET utf8mb4
-     COLLATE utf8mb4_unicode_ci`
-  );
-  await serverConnection.end();
+  try {
+    await serverConnection.query(
+      `CREATE DATABASE IF NOT EXISTS \`${env.dbName}\`
+       CHARACTER SET utf8mb4
+       COLLATE utf8mb4_unicode_ci`
+    );
+  } catch (error) {
+    if (['ER_DBACCESS_DENIED_ERROR', 'ER_SPECIFIC_ACCESS_DENIED_ERROR'].includes(error.code)) {
+      let databaseConnection;
+
+      try {
+        databaseConnection = await mysql.createConnection({
+          host: env.dbHost,
+          port: env.dbPort,
+          user: env.dbUser,
+          password: env.dbPassword,
+          database: env.dbName
+        });
+        return;
+      } catch {
+        throw new Error(
+          `O usuario ${env.dbUser}@${env.dbHost} nao pode criar o banco ${env.dbName}, e tambem nao foi possivel conectar nele. Crie o banco no provedor MySQL ou ajuste DB_NAME.`
+        );
+      } finally {
+        if (databaseConnection) {
+          await databaseConnection.end();
+        }
+      }
+    }
+
+    throw error;
+  } finally {
+    await serverConnection.end();
+  }
 }
 
 export async function getDb() {
