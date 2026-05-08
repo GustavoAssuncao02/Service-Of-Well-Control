@@ -19,6 +19,16 @@ historyRoutes.get(
       params.push(req.query.date, req.query.date);
     }
 
+    if (req.query.startDate) {
+      clauses.push('DATE(t.data_fim) >= DATE(?)');
+      params.push(req.query.startDate);
+    }
+
+    if (req.query.endDate) {
+      clauses.push('DATE(t.data_inicio) <= DATE(?)');
+      params.push(req.query.endDate);
+    }
+
     if (req.query.student) {
       clauses.push('(a.nome_completo LIKE ? OR a.cpf LIKE ?)');
       params.push(`%${req.query.student}%`, `%${req.query.student}%`);

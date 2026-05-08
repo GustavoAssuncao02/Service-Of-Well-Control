@@ -1,10 +1,11 @@
-import { ArrowLeft, CalendarDays, CheckCircle2, Download, Eye, FileImage, GraduationCap, MapPin, Monitor, RotateCcw, Send, UsersRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, Download, Eye, FileImage, GraduationCap, MapPin, Monitor, RotateCcw, Send, UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState } from '../components/Field.jsx';
 import { formatDate } from '../utils/date.js';
 import { isDoneStatus, isVisiblePlace, studentCountLabel } from '../utils/display.js';
+import { openAttendanceListPdf } from '../utils/attendanceListExport.js';
 import { downloadClassReport, downloadClassReportPng } from '../utils/pdfReport.js';
 
 function InfoItem({ label, value, icon: Icon }) {
@@ -150,6 +151,10 @@ export default function ClassDetails() {
           <button className="primary-button" type="button" onClick={() => downloadClassReport(turma)}>
             <Download size={18} />
             Baixar PDF
+          </button>
+          <button className="ghost-button" type="button" onClick={() => openAttendanceListPdf(turma)}>
+            <ClipboardList size={16} />
+            Gerar lista de presenca
           </button>
           <button className="ghost-button" type="button" onClick={() => downloadClassReportPng(turma)}>
             <FileImage size={16} />

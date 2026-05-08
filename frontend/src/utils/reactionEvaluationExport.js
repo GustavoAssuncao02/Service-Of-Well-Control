@@ -188,18 +188,29 @@ function buildReactionEvaluationPages(evaluation) {
   }
 
   function wrapForWidth(value, width, size = 8.5) {
-    const maxChars = Math.max(8, Math.floor(width / (size * 0.5)));
+    const maxChars = Math.max(8, Math.floor(width / (size * 0.62)));
     return wrapText(value, maxChars);
   }
 
-  function addField(label, value, x, topY, width, height = 34) {
+  function fitLines(value, width, size = 8.5, maxLines = 3) {
+    const maxChars = Math.max(8, Math.floor(width / (size * 0.62)));
+    const lines = wrapText(value, maxChars);
+    const visibleLines = lines.slice(0, maxLines);
+
+    if (lines.length > maxLines) {
+      const lastIndex = visibleLines.length - 1;
+      const lastLine = visibleLines[lastIndex] || '';
+      visibleLines[lastIndex] = `${lastLine.slice(0, Math.max(0, maxChars - 3)).trim()}...`;
+    }
+
+    return visibleLines;
+  }
+
+  function addField(label, value, x, topY, width) {
     addText(label, x, topY, { size: 7.2, bold: true });
-    wrapForWidth(value, width, 8.6)
-      .slice(0, 2)
-      .forEach((lineText, index) => {
-        addText(lineText, x, topY - 12 - index * 10, { size: 8.6 });
-      });
-    return height;
+    fitLines(value, width, 8.4, 3).forEach((lineText, index) => {
+      addText(lineText, x, topY - 12 - index * 10, { size: 8.4 });
+    });
   }
 
   function addInfoBlock() {
@@ -220,22 +231,35 @@ function buildReactionEvaluationPages(evaluation) {
       ['Status da turma', evaluation.turma_status || '-'],
       ['Teste Zoom', evaluation.teste_zoom || '-']
     ];
-    const columns = 3;
-    const gap = 12;
-    const fieldWidth = (contentWidth - gap * (columns - 1)) / columns;
-    const rowHeight = 38;
-    const rows = Math.ceil(fields.length / columns);
-    const blockHeight = rows * rowHeight + 18;
+    const columns = 2;
+    const gap = 16;
+    const paddingX = 14;
+    const paddingTop = 16;
+    const fieldWidth = (contentWidth - paddingX * 2 - gap) / columns;
+    const rows = [];
+
+    for (let index = 0; index < fields.length; index += columns) {
+      const rowFields = fields.slice(index, index + columns);
+      const lineCounts = rowFields.map(([, value]) => fitLines(value, fieldWidth, 8.4, 3).length);
+      rows.push({ fields: rowFields, height: Math.max(40, Math.max(...lineCounts) * 10 + 24) });
+    }
+
+    const blockHeight = rows.reduce((total, row) => total + row.height, paddingTop + 8);
 
     fillRect(margin, y - blockHeight, contentWidth, blockHeight, '0.985 0.99 1');
     strokeRect(margin, y - blockHeight, contentWidth, blockHeight);
 
-    fields.forEach(([label, value], index) => {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
-      const x = margin + 14 + column * (fieldWidth + gap);
-      const fieldY = y - 16 - row * rowHeight;
-      addField(label, value, x, fieldY, fieldWidth - 18);
+    let rowY = y - paddingTop;
+    rows.forEach((row, rowIndex) => {
+      row.fields.forEach(([label, value], column) => {
+        const x = margin + paddingX + column * (fieldWidth + gap);
+        addField(label, value, x, rowY, fieldWidth);
+      });
+
+      if (rowIndex < rows.length - 1) {
+        line(margin + paddingX, rowY - row.height + 8, margin + contentWidth - paddingX, rowY - row.height + 8, '0.9', 0.35);
+      }
+      rowY -= row.height;
     });
 
     y -= blockHeight + 16;
@@ -286,6 +310,7 @@ function buildReactionEvaluationPages(evaluation) {
 
   startPage(false);
   addInfoBlock();
+  if (y < margin + 330) startPage(true);
   addSectionTitle('Avaliacao de reacao');
   addCriteriaHeader();
   reactionCriteriaLabels.forEach((label, index) => addCriteriaRow(label, evaluation[`nota_${index + 1}`], index));

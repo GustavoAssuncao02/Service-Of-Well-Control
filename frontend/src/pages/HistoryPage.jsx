@@ -16,7 +16,7 @@ function handleRowKeyDown(event, action) {
 
 export default function HistoryPage() {
   const navigate = useNavigate();
-  const [filters, setFilters] = useState({ date: '', student: '', status: '', courseId: '', instructorId: '' });
+  const [filters, setFilters] = useState({ startDate: '', endDate: '', student: '', status: '', courseId: '', instructorId: '' });
   const [rows, setRows] = useState([]);
   const [courses, setCourses] = useState([]);
   const [instructors, setInstructors] = useState([]);
@@ -60,13 +60,16 @@ export default function HistoryPage() {
       <div className="section-heading">
         <span>Registros</span>
         <h1>Histórico de cursos</h1>
-        <p>Filtre por data, aluno, curso, instrutor e status de conclusão.</p>
+        <p>Filtre por periodo, aluno, curso, instrutor e status de conclusão.</p>
       </div>
 
       <section className="panel">
         <form className="filters" onSubmit={apply}>
-          <Field label="Data">
-            <input type="date" value={filters.date} onChange={(event) => update('date', event.target.value)} />
+          <Field label="Data inicio">
+            <input type="date" value={filters.startDate} onChange={(event) => update('startDate', event.target.value)} />
+          </Field>
+          <Field label="Data fim">
+            <input type="date" value={filters.endDate} onChange={(event) => update('endDate', event.target.value)} />
           </Field>
           <Field label="Aluno ou CPF">
             <input value={filters.student} onChange={(event) => update('student', event.target.value)} />
