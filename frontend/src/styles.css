@@ -34,6 +34,11 @@
   --r-lg: 14px;
   --r-xl: 20px;
 
+  /* Visual density */
+  --app-zoom: 1;
+  --app-zoom-inverse: 100%;
+  --app-viewport-height: 100vh;
+
   font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -54,10 +59,35 @@ button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 img { max-width: 100%; }
 
+@media (min-width: 761px) {
+  :root {
+    --app-zoom: 0.8;
+    --app-zoom-inverse: 125%;
+    --app-viewport-height: 125vh;
+  }
+
+  #root {
+    width: var(--app-zoom-inverse);
+    min-height: var(--app-viewport-height);
+    zoom: var(--app-zoom);
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  @supports not (zoom: 1) {
+    #root {
+      transform: scale(var(--app-zoom));
+      transform-origin: top left;
+    }
+  }
+}
+
 /* ─── Public / Auth Pages ────────────────────────────────── */
 .public-page,
 .auth-page {
-  min-height: 100vh;
+  min-height: var(--app-viewport-height);
   background:
     radial-gradient(ellipse 80% 60% at 60% -10%, rgba(59,130,246,0.12) 0%, transparent 70%),
     radial-gradient(ellipse 50% 40% at -5% 80%, rgba(249,115,22,0.08) 0%, transparent 60%),
@@ -650,14 +680,14 @@ input[readonly] {
 .language-track button.active { color: var(--blue-dark); }
 
 /* ─── App Shell ─────────────────────────────────────────── */
-.shell { min-height: 100vh; display: flex; }
+.shell { min-height: var(--app-viewport-height); display: flex; }
 
 /* Sidebar */
 .sidebar {
   position: sticky;
   top: 0;
   width: 220px;
-  height: 100vh;
+  height: var(--app-viewport-height);
   background: linear-gradient(180deg, #fff 0%, #f8fafd 100%);
   border-right: 1px solid var(--line);
   padding: 22px 12px;
@@ -856,6 +886,15 @@ input[readonly] {
   place-items: center;
   padding: 20px;
   background: rgba(14, 23, 41, 0.42);
+}
+
+@media (min-width: 761px) {
+  .modal-backdrop {
+    right: auto;
+    bottom: auto;
+    width: 125vw;
+    min-height: var(--app-viewport-height);
+  }
 }
 
 .modal-card {
