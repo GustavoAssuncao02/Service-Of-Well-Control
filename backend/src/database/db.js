@@ -4,6 +4,17 @@ import { env } from '../config/env.js';
 let connection;
 let db;
 
+function mysqlConnectionConfig(extraConfig = {}) {
+  return {
+    host: env.dbHost,
+    port: env.dbPort,
+    user: env.dbUser,
+    password: env.dbPassword,
+    connectTimeout: 10000,
+    ...extraConfig
+  };
+}
+
 function normalizeParams(params) {
   if (params.length === 1 && Array.isArray(params[0])) {
     return params[0];
@@ -45,13 +56,9 @@ async function ensureDatabaseExists() {
   let serverConnection;
 
   try {
-    serverConnection = await mysql.createConnection({
-      host: env.dbHost,
-      port: env.dbPort,
-      user: env.dbUser,
-      password: env.dbPassword,
+    serverConnection = await mysql.createConnection(mysqlConnectionConfig({
       multipleStatements: true
-    });
+    }));
   } catch (error) {
     if (error.code === 'ER_ACCESS_DENIED_ERROR') {
       throw new Error(
@@ -74,10 +81,7 @@ async function ensureDatabaseExists() {
 
       try {
         databaseConnection = await mysql.createConnection({
-          host: env.dbHost,
-          port: env.dbPort,
-          user: env.dbUser,
-          password: env.dbPassword,
+          ...mysqlConnectionConfig(),
           database: env.dbName
         });
         return;
@@ -103,16 +107,12 @@ export async function getDb() {
     await ensureDatabaseExists();
 
     try {
-      connection = await mysql.createConnection({
-        host: env.dbHost,
-        port: env.dbPort,
-        user: env.dbUser,
-        password: env.dbPassword,
+      connection = await mysql.createConnection(mysqlConnectionConfig({
         database: env.dbName,
         charset: 'utf8mb4',
         multipleStatements: true,
         dateStrings: true
-      });
+      }));
     } catch (error) {
       if (error.code === 'ER_ACCESS_DENIED_ERROR') {
         throw new Error(

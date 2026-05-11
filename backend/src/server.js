@@ -30,8 +30,12 @@ const __dirname = path.dirname(__filename);
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 const frontendIndexPath = path.join(frontendDistPath, 'index.html');
 
+console.log('Iniciando Service Of WellControl API...');
+console.log(`Inicializando banco: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
+
 try {
   await initializeDatabase();
+  console.log('Banco inicializado com sucesso.');
 } catch (error) {
   console.error('Falha ao inicializar o banco de dados.');
   console.error(`Conexao configurada: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
