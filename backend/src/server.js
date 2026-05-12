@@ -29,24 +29,40 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 const frontendIndexPath = path.join(frontendDistPath, 'index.html');
+const databaseStatus = {
+  ok: false,
+  initializing: true,
+  message: 'Inicializando banco de dados.',
+  checkedAt: null
+};
 
 console.log('Iniciando Service Of WellControl API...');
-console.log(`Servidor configurado para ${env.host}:${env.port}`);
+console.log(`Servidor configurado para ${env.host}:${env.port} (origem da porta: ${env.portSource})`);
 console.log(`JELASTIC_EXPOSE=${process.env.JELASTIC_EXPOSE || '(nao definido)'}`);
+console.log(`PORT=${process.env.PORT || '(nao definido)'}`);
 console.log(`Inicializando banco: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
 
-try {
-  await initializeDatabase();
-  console.log('Banco inicializado com sucesso.');
-} catch (error) {
-  console.error('Falha ao inicializar o banco de dados.');
-  console.error(`Conexao configurada: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
-  console.error(
-    'Na hospedagem, configure DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET e ADMIN_PASSWORD nas Environment Variables.'
-  );
-  console.error(error);
-  process.exit(1);
-}
+initializeDatabase()
+  .then(() => {
+    databaseStatus.ok = true;
+    databaseStatus.initializing = false;
+    databaseStatus.message = 'Banco inicializado com sucesso.';
+    databaseStatus.checkedAt = new Date().toISOString();
+    console.log(databaseStatus.message);
+  })
+  .catch((error) => {
+    databaseStatus.ok = false;
+    databaseStatus.initializing = false;
+    databaseStatus.message = error.message || 'Falha ao inicializar o banco de dados.';
+    databaseStatus.checkedAt = new Date().toISOString();
+
+    console.error('Falha ao inicializar o banco de dados.');
+    console.error(`Conexao configurada: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
+    console.error(
+      'Na hospedagem, configure DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET e ADMIN_PASSWORD nas Environment Variables.'
+    );
+    console.error(error);
+  });
 
 const app = express();
 
@@ -54,7 +70,17 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, service: 'Service Of WellControl API' });
+  res.json({
+    ok: true,
+    service: 'Service Of WellControl API',
+    server: {
+      host: env.host,
+      port: env.port,
+      portSource: env.portSource,
+      jelasticExpose: process.env.JELASTIC_EXPOSE || null
+    },
+    database: databaseStatus
+  });
 });
 
 app.get('/api/health/drive', (req, res) => {
@@ -116,12 +142,31 @@ if (hasFrontendBuild) {
 
 app.use(errorHandler);
 
-const server = app.listen(env.port, env.host, () => {
-  console.log(`API rodando em http://${env.host}:${env.port}/api`);
+const listenTargets = new Map();
+
+listenTargets.set(env.port, {
+  label: `porta principal (${env.portSource})`,
+  required: true
 });
 
-server.on('error', (error) => {
-  console.error(`Falha ao iniciar servidor em ${env.host}:${env.port}.`);
-  console.error(error);
-  process.exit(1);
-});
+if (env.port !== 8080) {
+  listenTargets.set(8080, {
+    label: 'fallback Jelastic',
+    required: false
+  });
+}
+
+for (const [port, target] of listenTargets) {
+  const server = app.listen(port, env.host, () => {
+    console.log(`API rodando em http://${env.host}:${port}/api (${target.label})`);
+  });
+
+  server.on('error', (error) => {
+    console.error(`Falha ao iniciar servidor em ${env.host}:${port} (${target.label}).`);
+    console.error(error);
+
+    if (target.required) {
+      process.exit(1);
+    }
+  });
+}

@@ -16,6 +16,20 @@ function envNumber(name, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function envPort(fallback) {
+  const names = ['JELASTIC_EXPOSE', 'PORT', 'NODE_PORT', 'APP_PORT', 'SERVER_PORT', 'OPENSHIFT_NODEJS_PORT', 'VCAP_APP_PORT'];
+
+  for (const name of names) {
+    const value = Number(envValue(name));
+
+    if (Number.isInteger(value) && value > 0 && value <= 65535) {
+      return { name, value };
+    }
+  }
+
+  return { name: 'default', value: fallback };
+}
+
 function envBoolean(name, fallback = false) {
   const rawValue = envValue(name).toLowerCase();
 
@@ -40,9 +54,11 @@ const hasGoogleDriveOauthConfig = Boolean(
 const googleDriveConfigured = googleDriveAuthType === 'oauth'
   ? hasGoogleDriveOauthConfig
   : hasGoogleDriveServiceAccountConfig;
+const serverPort = envPort(8080);
 
 export const env = {
-  port: envNumber('PORT', 3333),
+  port: serverPort.value,
+  portSource: serverPort.name,
   host: envValue('HOST') || '0.0.0.0',
   jwtSecret: envValue('JWT_SECRET') || 'dev-secret-change-me',
   jwtExpiresIn: envValue('JWT_EXPIRES_IN') || '14d',
