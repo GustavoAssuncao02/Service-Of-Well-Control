@@ -7,7 +7,10 @@ export function errorHandler(error, req, res, next) {
 
   if (error?.code === 'LIMIT_FILE_SIZE') {
     return res.status(413).json({
-      message: `Arquivo muito grande. O limite atual e de ${env.googleDriveMaxUploadMb} MB.`
+      message:
+        error.message && error.message !== 'File too large'
+          ? error.message
+          : `Arquivo muito grande. O limite atual e de ${env.googleDriveMaxUploadMb} MB.`
     });
   }
 

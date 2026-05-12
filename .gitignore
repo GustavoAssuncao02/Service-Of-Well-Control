@@ -4,6 +4,8 @@ dist
 backend/database/*.sqlite
 backend/database/*.sqlite-shm
 backend/database/*.sqlite-wal
+backend/storage/test-uploads/*
+!backend/storage/test-uploads/.gitkeep
 requisição.md
 requisição.md
 requisição.md

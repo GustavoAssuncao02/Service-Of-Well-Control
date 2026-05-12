@@ -6,6 +6,7 @@ import {
   Cake,
   ClipboardCheck,
   FileSearch,
+  FlaskConical,
   Folder,
   GraduationCap,
   History,
@@ -49,7 +50,8 @@ const navItems = [
   { to: '/admin/usuarios', label: 'Usuários', icon: UserCog },
   { to: '/admin/relatorio-avaliacoes', label: 'Relatorio de avaliacoes', icon: BarChart3 },
   { to: '/admin/relatorio-turmas', label: 'Relatorio de turmas', icon: BarChart3 },
-  { to: '/admin/relatorio-alunos', label: 'Relatorio de alunos', icon: BarChart3 }
+  { to: '/admin/relatorio-alunos', label: 'Relatorio de alunos', icon: BarChart3 },
+  { to: '/admin/teste', label: 'Teste', icon: FlaskConical }
 ];
 
 export default function Layout() {
