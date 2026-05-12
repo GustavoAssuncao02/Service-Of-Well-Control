@@ -27,7 +27,6 @@ const StudentDetails = lazy(() => import('./pages/StudentDetails.jsx'));
 const StudentHome = lazy(() => import('./pages/StudentHome.jsx'));
 const StudentReport = lazy(() => import('./pages/StudentReport.jsx'));
 const Students = lazy(() => import('./pages/Students.jsx'));
-const TestPage = lazy(() => import('./pages/TestPage.jsx'));
 const UserArea = lazy(() => import('./pages/UserArea.jsx'));
 const UsersPage = lazy(() => import('./pages/UsersPage.jsx'));
 
@@ -69,7 +68,6 @@ export default function App() {
             <Route path="relatorio-avaliacoes" element={<EvaluationReport />} />
             <Route path="relatorio-turmas" element={<ClassReport />} />
             <Route path="relatorio-alunos" element={<StudentReport />} />
-            <Route path="teste" element={<TestPage />} />
           </Route>
         </Route>
       </Routes>
