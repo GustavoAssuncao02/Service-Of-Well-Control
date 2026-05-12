@@ -43,6 +43,7 @@ const googleDriveConfigured = googleDriveAuthType === 'oauth'
 
 export const env = {
   port: envNumber('PORT', 3333),
+  host: envValue('HOST') || '0.0.0.0',
   jwtSecret: envValue('JWT_SECRET') || 'dev-secret-change-me',
   jwtExpiresIn: envValue('JWT_EXPIRES_IN') || '14d',
   dbHost: envValue('DB_HOST') || 'localhost',

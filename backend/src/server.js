@@ -31,6 +31,8 @@ const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 const frontendIndexPath = path.join(frontendDistPath, 'index.html');
 
 console.log('Iniciando Service Of WellControl API...');
+console.log(`Servidor configurado para ${env.host}:${env.port}`);
+console.log(`JELASTIC_EXPOSE=${process.env.JELASTIC_EXPOSE || '(nao definido)'}`);
 console.log(`Inicializando banco: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
 
 try {
@@ -98,7 +100,10 @@ app.use('/api', (req, res) => {
   res.status(404).json({ message: 'Rota não encontrada.' });
 });
 
-if (fs.existsSync(frontendIndexPath)) {
+const hasFrontendBuild = fs.existsSync(frontendIndexPath);
+console.log(`Frontend build: ${hasFrontendBuild ? frontendIndexPath : 'nao encontrado'}`);
+
+if (hasFrontendBuild) {
   app.use(express.static(frontendDistPath));
   app.get('*', (req, res) => {
     res.sendFile(frontendIndexPath);
@@ -111,6 +116,12 @@ if (fs.existsSync(frontendIndexPath)) {
 
 app.use(errorHandler);
 
-app.listen(env.port, () => {
-  console.log(`API rodando em http://localhost:${env.port}/api`);
+const server = app.listen(env.port, env.host, () => {
+  console.log(`API rodando em http://${env.host}:${env.port}/api`);
+});
+
+server.on('error', (error) => {
+  console.error(`Falha ao iniciar servidor em ${env.host}:${env.port}.`);
+  console.error(error);
+  process.exit(1);
 });
