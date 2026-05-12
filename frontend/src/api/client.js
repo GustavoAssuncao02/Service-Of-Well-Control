@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearSessionCache } from '../utils/sessionCache.js';
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api'
@@ -19,6 +20,7 @@ api.interceptors.response.use(
     if (error?.response?.status === 401) {
       localStorage.removeItem('swc_token');
       localStorage.removeItem('swc_user');
+      clearSessionCache();
 
       if (window.location.pathname !== '/login') {
         window.location.assign('/login');

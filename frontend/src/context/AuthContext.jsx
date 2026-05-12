@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
+import { clearSessionCache } from '../utils/sessionCache.js';
 
 const AuthContext = createContext(null);
 
@@ -15,6 +16,7 @@ export function AuthProvider({ children }) {
   });
 
   async function login(email, password) {
+    clearSessionCache();
     const { data } = await api.post('/auth/login', { email, password });
     localStorage.setItem('swc_token', data.token);
     localStorage.setItem('swc_user', JSON.stringify(data.user));
@@ -47,6 +49,7 @@ export function AuthProvider({ children }) {
   function logout() {
     localStorage.removeItem('swc_token');
     localStorage.removeItem('swc_user');
+    clearSessionCache();
     setUser(null);
   }
 

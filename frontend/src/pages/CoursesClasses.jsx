@@ -3,6 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getApiError } from '../api/client.js';
 import { EmptyState, Field } from '../components/Field.jsx';
+import {
+  coursesClassesResourceKeys,
+  emptyCoursesClassesData,
+  readCoursesClassesCache,
+  refreshCoursesClassesCache,
+  shouldRevalidateCoursesClassesCache,
+  writeCoursesClassesCache
+} from '../services/coursesClassesData.js';
 import { formatDate } from '../utils/date.js';
 import { isDoneStatus } from '../utils/display.js';
 import { downloadClassReport, downloadClassReportPng } from '../utils/pdfReport.js';
@@ -42,15 +50,17 @@ function handleRowKeyDown(event, action) {
 
 export default function CoursesClasses() {
   const navigate = useNavigate();
+  const [initialCachedSnapshot] = useState(() => readCoursesClassesCache());
+  const initialData = initialCachedSnapshot?.data || emptyCoursesClassesData;
   const [activeTab, setActiveTab] = useState('classes');
-  const [courses, setCourses] = useState([]);
-  const [classifications, setClassifications] = useState([]);
-  const [classes, setClasses] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [instructors, setInstructors] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [onlineRooms, setOnlineRooms] = useState([]);
-  const [classModalities, setClassModalities] = useState([]);
+  const [courses, setCourses] = useState(initialData.courses);
+  const [classifications, setClassifications] = useState(initialData.classifications);
+  const [classes, setClasses] = useState(initialData.classes);
+  const [students, setStudents] = useState(initialData.students);
+  const [instructors, setInstructors] = useState(initialData.instructors);
+  const [locations, setLocations] = useState(initialData.locations);
+  const [onlineRooms, setOnlineRooms] = useState(initialData.onlineRooms);
+  const [classModalities, setClassModalities] = useState(initialData.classModalities);
   const [courseForm, setCourseForm] = useState(initialCourseForm);
   const [classificationForm, setClassificationForm] = useState(initialClassificationForm);
   const [locationForm, setLocationForm] = useState(initialLocationForm);
@@ -72,37 +82,41 @@ export default function CoursesClasses() {
   const [copiedEvaluationStudentKey, setCopiedEvaluationStudentKey] = useState('');
   const [reportClassId, setReportClassId] = useState(null);
   const [error, setError] = useState('');
+  const dataRef = useRef(initialData);
   const evaluationLinkTimeout = useRef(null);
+  const mountedRef = useRef(false);
+  const latestLoadRef = useRef(0);
+
+  function applyData(nextData, { persist = true } = {}) {
+    dataRef.current = { ...dataRef.current, ...nextData };
+    setCourses(dataRef.current.courses);
+    setClassifications(dataRef.current.classifications);
+    setClasses(dataRef.current.classes);
+    setStudents(dataRef.current.students);
+    setInstructors(dataRef.current.instructors);
+    setLocations(dataRef.current.locations);
+    setOnlineRooms(dataRef.current.onlineRooms);
+    setClassModalities(dataRef.current.classModalities);
+
+    if (persist) {
+      writeCoursesClassesCache(dataRef.current);
+    }
+  }
+
+  async function loadResources(keys = coursesClassesResourceKeys) {
+    const loadId = latestLoadRef.current + 1;
+    latestLoadRef.current = loadId;
+    const nextData = await refreshCoursesClassesCache(keys, dataRef.current, { persist: false });
+
+    if (mountedRef.current && loadId === latestLoadRef.current) {
+      applyData(nextData);
+    }
+
+    return nextData;
+  }
 
   async function loadAll() {
-    const [
-      courseResponse,
-      classificationResponse,
-      classResponse,
-      studentResponse,
-      instructorResponse,
-      locationResponse,
-      onlineRoomResponse,
-      classModalityResponse
-    ] = await Promise.all([
-      api.get('/courses'),
-      api.get('/course-classifications'),
-      api.get('/classes'),
-      api.get('/students'),
-      api.get('/instructors'),
-      api.get('/locations'),
-      api.get('/online-rooms'),
-      api.get('/class-modalities')
-    ]);
-
-    setCourses(courseResponse.data);
-    setClassifications(classificationResponse.data);
-    setClasses(classResponse.data);
-    setStudents(studentResponse.data);
-    setInstructors(instructorResponse.data);
-    setLocations(locationResponse.data);
-    setOnlineRooms(onlineRoomResponse.data);
-    setClassModalities(classModalityResponse.data);
+    return loadResources(coursesClassesResourceKeys);
   }
 
   const filteredStudents = useMemo(() => {
@@ -117,9 +131,14 @@ export default function CoursesClasses() {
   }, [studentSearch, students]);
 
   useEffect(() => {
-    loadAll().catch((err) => setError(getApiError(err)));
+    mountedRef.current = true;
+
+    if (shouldRevalidateCoursesClassesCache(initialCachedSnapshot)) {
+      loadAll().catch((err) => setError(getApiError(err)));
+    }
 
     return () => {
+      mountedRef.current = false;
       if (evaluationLinkTimeout.current) {
         clearTimeout(evaluationLinkTimeout.current);
       }
@@ -139,7 +158,7 @@ export default function CoursesClasses() {
       }
       setCourseForm(initialCourseForm);
       setEditingCourse(null);
-      await loadAll();
+      await loadResources(['courses', 'classes']);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -160,7 +179,7 @@ export default function CoursesClasses() {
       }
       setClassificationForm(initialClassificationForm);
       setEditingClassification(null);
-      await loadAll();
+      await loadResources(['classifications', 'courses']);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -181,7 +200,7 @@ export default function CoursesClasses() {
       }
       setLocationForm(initialLocationForm);
       setEditingLocation(null);
-      await loadAll();
+      await loadResources(['locations']);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -202,7 +221,7 @@ export default function CoursesClasses() {
       }
       setOnlineRoomForm(initialOnlineRoomForm);
       setEditingOnlineRoom(null);
-      await loadAll();
+      await loadResources(['onlineRooms']);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -238,7 +257,7 @@ export default function CoursesClasses() {
       setEditingClass(null);
       setCurrentClassStudents([]);
       setStudentSearch('');
-      await loadAll();
+      await loadResources(['classes', 'courses', 'locations', 'onlineRooms']);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -250,7 +269,7 @@ export default function CoursesClasses() {
     if (!confirm('Excluir curso e suas turmas vinculadas?')) return;
     try {
       await api.delete(`/courses/${id}`);
-      await loadAll();
+      await loadResources(['courses', 'classes']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -260,7 +279,7 @@ export default function CoursesClasses() {
     if (!confirm('Excluir classificação?')) return;
     try {
       await api.delete(`/course-classifications/${id}`);
-      await loadAll();
+      await loadResources(['classifications', 'courses']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -270,7 +289,7 @@ export default function CoursesClasses() {
     if (!confirm('Excluir local?')) return;
     try {
       await api.delete(`/locations/${id}`);
-      await loadAll();
+      await loadResources(['locations']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -280,7 +299,7 @@ export default function CoursesClasses() {
     if (!confirm('Excluir sala online?')) return;
     try {
       await api.delete(`/online-rooms/${id}`);
-      await loadAll();
+      await loadResources(['onlineRooms']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -290,7 +309,7 @@ export default function CoursesClasses() {
     if (!confirm('Excluir turma?')) return;
     try {
       await api.delete(`/classes/${id}`);
-      await loadAll();
+      await loadResources(['classes', 'courses', 'locations', 'onlineRooms']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -299,7 +318,7 @@ export default function CoursesClasses() {
   async function completeClass(id) {
     try {
       await api.patch(`/classes/${id}/complete`);
-      await loadAll();
+      await loadResources(['classes', 'courses']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -321,7 +340,7 @@ export default function CoursesClasses() {
           student_classifications: buildStudentClassificationMap(data.alunos)
         }));
       }
-      await loadAll();
+      await loadResources(['classes', 'courses']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -389,7 +408,7 @@ export default function CoursesClasses() {
       await api.patch(`/classes/${editingClass.id}/students/${studentId}/complete`);
       const { data } = await api.get(`/classes/${editingClass.id}`);
       setCurrentClassStudents(data.alunos);
-      await loadAll();
+      await loadResources(['classes']);
     } catch (err) {
       setError(getApiError(err));
     }
@@ -408,7 +427,7 @@ export default function CoursesClasses() {
         student_ids: data.alunos.map((student) => String(student.id)),
         student_classifications: buildStudentClassificationMap(data.alunos)
       }));
-      await loadAll();
+      await loadResources(['classes']);
     } catch (err) {
       setError(getApiError(err));
     }

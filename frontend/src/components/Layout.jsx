@@ -20,12 +20,17 @@ import {
   UserCog,
   X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { warmCoursesClassesCache } from '../services/coursesClassesData.js';
 import AccessRequestsLoginToast from './AccessRequestsLoginToast.jsx';
 import BirthdayLoginToast from './BirthdayLoginToast.jsx';
 import SwcLogo from './SwcLogo.jsx';
+
+function preloadCoursesClassesPage() {
+  return Promise.all([warmCoursesClassesCache(), import('../pages/CoursesClasses.jsx')]);
+}
 
 const navItems = [
   { to: '/admin/area-usuario', label: 'Area do usuario', icon: Folder },
@@ -35,7 +40,7 @@ const navItems = [
   { to: '/admin/alunos', label: 'Alunos', icon: Users },
   { to: '/admin/documentos', label: 'Consultar documentos', icon: FileSearch },
   { to: '/admin/instrutores', label: 'Instrutores', icon: GraduationCap },
-  { to: '/admin/cursos-turmas', label: 'Cursos e turmas', icon: BookOpen },
+  { to: '/admin/cursos-turmas', label: 'Cursos e turmas', icon: BookOpen, preload: preloadCoursesClassesPage },
   { to: '/admin/modalidades-aula', label: 'Modalidades de aula', icon: Monitor },
   { to: '/admin/controle-avaliacoes', label: 'Controle', icon: ClipboardCheck },
   { to: '/admin/aniversariantes', label: 'Aniversariantes', icon: Cake },
@@ -53,9 +58,25 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const warmup = () => preloadCoursesClassesPage().catch(() => {});
+
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(warmup, { timeout: 3000 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timeoutId = window.setTimeout(warmup, 1200);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   function handleLogout() {
     logout();
     navigate('/login');
+  }
+
+  function preloadNavItem(item) {
+    item.preload?.().catch(() => {});
   }
 
   return (
@@ -79,7 +100,18 @@ export default function Layout() {
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
-              <NavLink key={item.to} to={item.to} end={item.to === '/admin'} onClick={() => setOpen(false)} title={item.label}>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/admin'}
+                onMouseEnter={() => preloadNavItem(item)}
+                onFocus={() => preloadNavItem(item)}
+                onClick={() => {
+                  preloadNavItem(item);
+                  setOpen(false);
+                }}
+                title={item.label}
+              >
                 <Icon size={18} />
                 <span>{item.label}</span>
               </NavLink>
