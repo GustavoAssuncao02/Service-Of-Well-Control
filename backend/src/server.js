@@ -42,7 +42,7 @@ console.log(`JELASTIC_EXPOSE=${process.env.JELASTIC_EXPOSE || '(nao definido)'}`
 console.log(`PORT=${process.env.PORT || '(nao definido)'}`);
 console.log(`Inicializando banco: ${env.dbUser}@${env.dbHost}:${env.dbPort}/${env.dbName}`);
 
-initializeDatabase()
+const databaseReady = initializeDatabase()
   .then(() => {
     databaseStatus.ok = true;
     databaseStatus.initializing = false;
@@ -101,6 +101,25 @@ app.get('/api/health/drive', (req, res) => {
     maxUploadMb: env.googleDriveMaxUploadMb,
     uploadConcurrency: env.googleDriveUploadConcurrency
   });
+});
+
+app.use('/api', async (req, res, next) => {
+  if (req.path.startsWith('/health')) {
+    return next();
+  }
+
+  if (databaseStatus.initializing) {
+    await databaseReady.catch(() => null);
+  }
+
+  if (!databaseStatus.ok) {
+    return res.status(503).json({
+      message: 'Banco de dados indisponivel.',
+      database: databaseStatus
+    });
+  }
+
+  return next();
 });
 
 app.use('/api/auth', authRoutes);
