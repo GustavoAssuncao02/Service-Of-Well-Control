@@ -1,8 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import mysql from 'mysql2/promise';
 import { env } from '../config/env.js';
 
-let connection;
+let pool;
 let db;
+const transactionStorage = new AsyncLocalStorage();
 
 function mysqlConnectionConfig(extraConfig = {}) {
   return {
@@ -23,15 +25,81 @@ function normalizeParams(params) {
   return params;
 }
 
-function createClient(mysqlConnection) {
+function normalizeSqlCommand(sql) {
+  return sql.trim().replace(/;+\s*$/, '').replace(/\s+/g, ' ').toUpperCase();
+}
+
+function getTransactionStore() {
+  const store = transactionStorage.getStore();
+  return store?.active && store.connection ? store : null;
+}
+
+async function startTransaction(mysqlPool, sql) {
+  if (getTransactionStore()) {
+    throw new Error('Ja existe uma transacao ativa neste contexto.');
+  }
+
+  const connection = await mysqlPool.getConnection();
+  const store = { connection, active: true };
+  transactionStorage.enterWith(store);
+
+  try {
+    await connection.query(sql);
+  } catch (error) {
+    store.active = false;
+    connection.release();
+    throw error;
+  }
+}
+
+async function finishTransaction(action) {
+  const store = getTransactionStore();
+
+  if (!store) {
+    throw new Error(`Nenhuma transacao ativa para ${action === 'commit' ? 'COMMIT' : 'ROLLBACK'}.`);
+  }
+
+  try {
+    if (action === 'commit') {
+      await store.connection.commit();
+    } else {
+      await store.connection.rollback();
+    }
+  } finally {
+    store.active = false;
+    store.connection.release();
+  }
+}
+
+function createClient(mysqlPool) {
   return {
     async exec(sql) {
       if (!sql?.trim()) return;
-      await mysqlConnection.query(sql);
+
+      const command = normalizeSqlCommand(sql);
+
+      if (command === 'BEGIN' || command === 'START TRANSACTION') {
+        await startTransaction(mysqlPool, sql);
+        return;
+      }
+
+      if (command === 'COMMIT') {
+        await finishTransaction('commit');
+        return;
+      }
+
+      if (command === 'ROLLBACK') {
+        await finishTransaction('rollback');
+        return;
+      }
+
+      const executor = getTransactionStore()?.connection || mysqlPool;
+      await executor.query(sql);
     },
 
     async all(sql, ...params) {
-      const [rows] = await mysqlConnection.execute(sql, normalizeParams(params));
+      const executor = getTransactionStore()?.connection || mysqlPool;
+      const [rows] = await executor.execute(sql, normalizeParams(params));
       return rows;
     },
 
@@ -41,7 +109,8 @@ function createClient(mysqlConnection) {
     },
 
     async run(sql, ...params) {
-      const [result] = await mysqlConnection.execute(sql, normalizeParams(params));
+      const executor = getTransactionStore()?.connection || mysqlPool;
+      const [result] = await executor.execute(sql, normalizeParams(params));
 
       return {
         ...result,
@@ -107,11 +176,16 @@ export async function getDb() {
     await ensureDatabaseExists();
 
     try {
-      connection = await mysql.createConnection(mysqlConnectionConfig({
+      pool = mysql.createPool(mysqlConnectionConfig({
         database: env.dbName,
         charset: 'utf8mb4',
         multipleStatements: true,
-        dateStrings: true
+        dateStrings: true,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 0
       }));
     } catch (error) {
       if (error.code === 'ER_ACCESS_DENIED_ERROR') {
@@ -123,7 +197,7 @@ export async function getDb() {
       throw error;
     }
 
-    db = createClient(connection);
+    db = createClient(pool);
   }
 
   return db;
@@ -134,10 +208,10 @@ export function getDatabaseLabel() {
 }
 
 export async function closeDb() {
-  if (connection) {
-    await connection.end();
+  if (pool) {
+    await pool.end();
   }
 
-  connection = undefined;
+  pool = undefined;
   db = undefined;
 }
