@@ -361,6 +361,36 @@ async function ensureUserAreaSupport(db) {
   );
 }
 
+async function ensurePerformanceIndexes(db) {
+  const indexes = [
+    ['alunos', 'idx_alunos_data_nascimento', 'data_nascimento'],
+    ['alunos', 'idx_alunos_cidade', 'cidade'],
+    ['alunos', 'idx_alunos_estado', 'estado'],
+    ['alunos', 'idx_alunos_responsavel', 'responsavel_inscricao'],
+    ['alunos', 'idx_alunos_operacao', 'operacao'],
+    ['alunos', 'idx_alunos_funcao', 'funcao'],
+    ['turmas', 'idx_turmas_status_data', 'status, data_inicio, data_fim'],
+    ['turmas', 'idx_turmas_local', 'local'],
+    ['turmas', 'idx_turmas_sala_online', 'sala_online'],
+    ['turma_alunos', 'idx_turma_alunos_turma_status', 'turma_id, status'],
+    ['turma_alunos', 'idx_turma_alunos_aluno_status', 'aluno_id, status'],
+    ['turma_alunos', 'idx_turma_alunos_turma_classificacao', 'turma_id, classificacao_presenca_id'],
+    ['turma_alunos', 'idx_turma_alunos_aluno_classificacao', 'aluno_id, classificacao_presenca_id'],
+    ['aluno_documentos', 'idx_aluno_documentos_aluno_turma', 'aluno_id, turma_id'],
+    ['avaliacoes', 'idx_avaliacoes_curso_data', 'curso_id, data_avaliacao'],
+    ['avaliacoes', 'idx_avaliacoes_instrutor_data', 'instrutor_id, data_avaliacao'],
+    ['avaliacoes', 'idx_avaliacoes_turma_data', 'turma_id, data_avaliacao'],
+    ['avaliacoes', 'idx_avaliacoes_teste_zoom', 'teste_zoom'],
+    ['usuario_arquivos', 'idx_usuario_arquivos_usuario_pasta', 'usuario_id, pasta_id'],
+    ['usuario_arquivos', 'idx_usuario_arquivos_usuario_criado', 'usuario_id, criado_em'],
+    ['usuario_notas', 'idx_usuario_notas_usuario_atualizado', 'usuario_id, atualizado_em']
+  ];
+
+  for (const [tableName, indexName, definition] of indexes) {
+    await ensureIndex(db, tableName, indexName, definition);
+  }
+}
+
 export async function initializeDatabase() {
   const db = await getDb();
   const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
@@ -385,6 +415,7 @@ export async function initializeDatabase() {
     await ensureStudentNotesSupport(db);
     await ensureStudentDocumentDriveSupport(db);
     await ensureUserAreaSupport(db);
+    await ensurePerformanceIndexes(db);
 
     const existingAdmin = await db.get('SELECT id FROM usuarios WHERE email = ?', env.adminEmail);
     if (!existingAdmin) {

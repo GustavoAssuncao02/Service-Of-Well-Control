@@ -12,102 +12,122 @@ dashboardRoutes.get(
   asyncHandler(async (req, res) => {
     const db = await getDb();
 
-    const activeCourses = await db.get("SELECT COUNT(*) AS total FROM turmas WHERE status = 'Em andamento'");
-    const completedCourses = await db.get("SELECT COUNT(*) AS total FROM turmas WHERE status LIKE 'Conclu%'");
-    const totalStudents = await db.get('SELECT COUNT(*) AS total FROM alunos');
-    const totalClasses = await db.get('SELECT COUNT(*) AS total FROM turmas');
-    const currentMonthStudents = await db.get(
-      "SELECT COUNT(*) AS total FROM alunos WHERE DATE_FORMAT(criado_em, '%Y-%m') = DATE_FORMAT(CURRENT_DATE, '%Y-%m')"
-    );
-    const lastMonthStudents = await db.get(
-      "SELECT COUNT(*) AS total FROM alunos WHERE DATE_FORMAT(criado_em, '%Y-%m') = DATE_FORMAT(DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH), '%Y-%m')"
-    );
-    const previousMonthStudents = await db.get(
-      "SELECT COUNT(*) AS total FROM alunos WHERE DATE_FORMAT(criado_em, '%Y-%m') = DATE_FORMAT(DATE_SUB(CURRENT_DATE, INTERVAL 2 MONTH), '%Y-%m')"
-    );
-    const averageStudentsPerMonth = await db.get(
-      `SELECT AVG(total) AS total
-       FROM (
-         SELECT DATE_FORMAT(criado_em, '%Y-%m') AS periodo, COUNT(*) AS total
+    const [
+      activeCourses,
+      completedCourses,
+      totalStudents,
+      totalClasses,
+      currentMonthStudents,
+      lastMonthStudents,
+      previousMonthStudents,
+      averageStudentsPerMonth,
+      courseDistribution,
+      courseFrequency,
+      sponsorDistribution,
+      companyRows,
+      classModalityDistribution,
+      classModalityUsage,
+      studentEvolution,
+      upcomingClasses
+    ] = await Promise.all([
+      db.get("SELECT COUNT(*) AS total FROM turmas WHERE status = 'Em andamento'"),
+      db.get("SELECT COUNT(*) AS total FROM turmas WHERE status LIKE 'Conclu%'"),
+      db.get('SELECT COUNT(*) AS total FROM alunos'),
+      db.get('SELECT COUNT(*) AS total FROM turmas'),
+      db.get(
+        `SELECT COUNT(*) AS total
+         FROM alunos
+         WHERE criado_em >= DATE_FORMAT(CURRENT_DATE, '%Y-%m-01')
+           AND criado_em < DATE_ADD(DATE_FORMAT(CURRENT_DATE, '%Y-%m-01'), INTERVAL 1 MONTH)`
+      ),
+      db.get(
+        `SELECT COUNT(*) AS total
+         FROM alunos
+         WHERE criado_em >= DATE_SUB(DATE_FORMAT(CURRENT_DATE, '%Y-%m-01'), INTERVAL 1 MONTH)
+           AND criado_em < DATE_FORMAT(CURRENT_DATE, '%Y-%m-01')`
+      ),
+      db.get(
+        `SELECT COUNT(*) AS total
+         FROM alunos
+         WHERE criado_em >= DATE_SUB(DATE_FORMAT(CURRENT_DATE, '%Y-%m-01'), INTERVAL 2 MONTH)
+           AND criado_em < DATE_SUB(DATE_FORMAT(CURRENT_DATE, '%Y-%m-01'), INTERVAL 1 MONTH)`
+      ),
+      db.get(
+        `SELECT AVG(total) AS total
+         FROM (
+           SELECT DATE_FORMAT(criado_em, '%Y-%m') AS periodo, COUNT(*) AS total
+           FROM alunos
+           GROUP BY periodo
+         ) monthly_students`
+      ),
+      db.all(
+        `SELECT c.nome, COUNT(t.id) AS total
+         FROM cursos c
+         LEFT JOIN turmas t ON t.curso_id = c.id
+         GROUP BY c.id
+         ORDER BY total DESC, c.nome ASC`
+      ),
+      db.all(
+        `SELECT c.nome, cc.nome AS tipo, COUNT(t.id) AS total
+         FROM cursos c
+         LEFT JOIN classificacoes_cursos cc ON cc.id = c.classificacao_id
+         LEFT JOIN turmas t ON t.curso_id = c.id
+         GROUP BY c.id
+         ORDER BY total DESC, c.nome ASC`
+      ),
+      db.all(
+        `SELECT COALESCE(a.responsavel_inscricao, 'Particular') AS tipo, COUNT(ta.id) AS total
+         FROM turma_alunos ta
+         JOIN alunos a ON a.id = ta.aluno_id
+         GROUP BY COALESCE(a.responsavel_inscricao, 'Particular')
+         ORDER BY total DESC`
+      ),
+      db.all(
+        `SELECT empresa, COUNT(*) AS total
+         FROM (
+           SELECT COALESCE(e.nome, NULLIF(TRIM(a.empresa), '')) AS empresa
+           FROM alunos a
+           LEFT JOIN empresas e ON e.id = a.empresa_id
+         ) company_base
+         WHERE empresa IS NOT NULL
+         GROUP BY empresa
+         ORDER BY total DESC, empresa ASC`
+      ),
+      db.all(
+        `SELECT cp.nome AS modalidade, COUNT(DISTINCT ta.aluno_id) AS total
+         FROM turma_alunos ta
+         JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+         GROUP BY cp.id
+         ORDER BY total DESC, cp.nome ASC`
+      ),
+      db.all(
+        `SELECT cp.nome AS modalidade, COUNT(DISTINCT ta.aluno_id) AS total
+         FROM classificacoes_presenca cp
+         LEFT JOIN turma_alunos ta ON ta.classificacao_presenca_id = cp.id
+         GROUP BY cp.id
+         ORDER BY total DESC, cp.nome ASC`
+      ),
+      db.all(
+        `SELECT DATE_FORMAT(criado_em, '%Y-%m') AS periodo, COUNT(*) AS total
          FROM alunos
          GROUP BY periodo
-       ) monthly_students`
-    );
-
-    const courseDistribution = await db.all(
-      `SELECT c.nome, COUNT(t.id) AS total
-       FROM cursos c
-       LEFT JOIN turmas t ON t.curso_id = c.id
-       GROUP BY c.id
-       ORDER BY total DESC, c.nome ASC`
-    );
-
-    const courseFrequency = await db.all(
-      `SELECT c.nome, cc.nome AS tipo, COUNT(t.id) AS total
-       FROM cursos c
-       LEFT JOIN classificacoes_cursos cc ON cc.id = c.classificacao_id
-       LEFT JOIN turmas t ON t.curso_id = c.id
-       GROUP BY c.id
-       ORDER BY total DESC, c.nome ASC`
-    );
-
-    const sponsorDistribution = await db.all(
-      `SELECT COALESCE(a.responsavel_inscricao, 'Particular') AS tipo, COUNT(ta.id) AS total
-       FROM turma_alunos ta
-       JOIN alunos a ON a.id = ta.aluno_id
-       GROUP BY COALESCE(a.responsavel_inscricao, 'Particular')
-       ORDER BY total DESC`
-    );
-
-    const companyRows = await db.all(
-      `SELECT empresa, COUNT(*) AS total
-       FROM (
-         SELECT COALESCE(e.nome, NULLIF(TRIM(a.empresa), '')) AS empresa
-         FROM alunos a
-         LEFT JOIN empresas e ON e.id = a.empresa_id
-       ) company_base
-       WHERE empresa IS NOT NULL
-       GROUP BY empresa
-       ORDER BY total DESC, empresa ASC`
-    );
+         ORDER BY periodo ASC`
+      ),
+      db.all(
+        `SELECT t.id, t.data_inicio, t.data_fim, t.status,
+                c.nome AS curso_nome, i.nome AS instrutor_nome
+         FROM turmas t
+         JOIN cursos c ON c.id = t.curso_id
+         JOIN instrutores i ON i.id = t.instrutor_id
+         ORDER BY t.data_inicio DESC
+         LIMIT 6`
+      )
+    ]);
     const companyTotal = companyRows.reduce((sum, item) => sum + Number(item.total || 0), 0);
     const companyDistribution = companyRows.map((item) => ({
       ...item,
       percentual: companyTotal ? Number(((Number(item.total || 0) * 100) / companyTotal).toFixed(2)) : 0
     }));
-
-    const classModalityDistribution = await db.all(
-      `SELECT cp.nome AS modalidade, COUNT(DISTINCT ta.aluno_id) AS total
-       FROM turma_alunos ta
-       JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
-       GROUP BY cp.id
-       ORDER BY total DESC, cp.nome ASC`
-    );
-
-    const classModalityUsage = await db.all(
-      `SELECT cp.nome AS modalidade, COUNT(DISTINCT ta.aluno_id) AS total
-       FROM classificacoes_presenca cp
-       LEFT JOIN turma_alunos ta ON ta.classificacao_presenca_id = cp.id
-       GROUP BY cp.id
-       ORDER BY total DESC, cp.nome ASC`
-    );
-
-    const studentEvolution = await db.all(
-      `SELECT DATE_FORMAT(criado_em, '%Y-%m') AS periodo, COUNT(*) AS total
-       FROM alunos
-       GROUP BY periodo
-       ORDER BY periodo ASC`
-    );
-
-    const upcomingClasses = await db.all(
-      `SELECT t.id, t.data_inicio, t.data_fim, t.status,
-              c.nome AS curso_nome, i.nome AS instrutor_nome
-       FROM turmas t
-       JOIN cursos c ON c.id = t.curso_id
-       JOIN instrutores i ON i.id = t.instrutor_id
-       ORDER BY DATE(t.data_inicio) DESC
-       LIMIT 6`
-    );
 
     res.json({
       activeCourses: activeCourses.total || 0,

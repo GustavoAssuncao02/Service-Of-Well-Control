@@ -182,7 +182,7 @@ export async function getDb() {
         multipleStatements: true,
         dateStrings: true,
         waitForConnections: true,
-        connectionLimit: 10,
+        connectionLimit: env.dbConnectionLimit,
         queueLimit: 0,
         enableKeepAlive: true,
         keepAliveInitialDelay: 0

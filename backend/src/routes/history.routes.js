@@ -15,17 +15,17 @@ historyRoutes.get(
     const params = [];
 
     if (req.query.date) {
-      clauses.push('(DATE(t.data_inicio) <= DATE(?) AND DATE(t.data_fim) >= DATE(?))');
+      clauses.push('(t.data_inicio <= ? AND t.data_fim >= ?)');
       params.push(req.query.date, req.query.date);
     }
 
     if (req.query.startDate) {
-      clauses.push('DATE(t.data_fim) >= DATE(?)');
+      clauses.push('t.data_fim >= ?');
       params.push(req.query.startDate);
     }
 
     if (req.query.endDate) {
-      clauses.push('DATE(t.data_inicio) <= DATE(?)');
+      clauses.push('t.data_inicio <= ?');
       params.push(req.query.endDate);
     }
 
@@ -62,7 +62,7 @@ historyRoutes.get(
        JOIN cursos c ON c.id = t.curso_id
        JOIN instrutores i ON i.id = t.instrutor_id
        ${where}
-       ORDER BY DATE(t.data_inicio) DESC, a.nome_completo ASC`,
+       ORDER BY t.data_inicio DESC, a.nome_completo ASC`,
       params
     );
 

@@ -37,7 +37,7 @@ publicRoutes.get(
             WHERE ta.turma_id = t.id
               AND ta.status = 'Concluído'
           )
-       ORDER BY DATE(t.data_fim) DESC`
+       ORDER BY t.data_fim DESC`
     );
 
     res.json(rows);

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env } from './config/env.js';
 import { initializeDatabase } from './database/init.js';
+import { apiCache } from './middleware/apiCache.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { userRoutes } from './routes/users.routes.js';
@@ -121,6 +122,8 @@ app.use('/api', async (req, res, next) => {
 
   return next();
 });
+
+app.use('/api', apiCache);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);

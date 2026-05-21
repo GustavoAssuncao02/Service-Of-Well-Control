@@ -58,8 +58,8 @@ calendarRoutes.get(
          LEFT JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
          GROUP BY ta.turma_id
        ) alunos ON alunos.turma_id = t.id
-       WHERE DATE(t.data_inicio) <= DATE(?) AND DATE(t.data_fim) >= DATE(?)
-       ORDER BY DATE(t.data_inicio) ASC`,
+       WHERE t.data_inicio <= ? AND t.data_fim >= ?
+       ORDER BY t.data_inicio ASC`,
       end,
       start
     );

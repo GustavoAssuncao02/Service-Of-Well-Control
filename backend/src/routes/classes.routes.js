@@ -8,10 +8,15 @@ export const classRoutes = Router();
 classRoutes.use(authenticate, requireAdmin);
 
 async function getDefaultAttendanceClassificationId(db) {
-  const defaultClassification =
-    (await db.get("SELECT id FROM classificacoes_presenca WHERE nome = 'Presencial'")) ||
-    (await db.get("SELECT id FROM classificacoes_presenca WHERE nome LIKE 'Presencial%' ORDER BY nome ASC LIMIT 1")) ||
-    (await db.get('SELECT id FROM classificacoes_presenca ORDER BY id ASC LIMIT 1'));
+  const defaultClassification = await db.get(
+    `SELECT id
+     FROM classificacoes_presenca
+     ORDER BY (nome = 'Presencial') DESC,
+              (nome LIKE 'Presencial%') DESC,
+              nome ASC,
+              id ASC
+     LIMIT 1`
+  );
 
   if (!defaultClassification) {
     const error = new Error('Cadastre uma modalidade de aula antes de vincular alunos a turma.');
@@ -88,16 +93,19 @@ async function syncClassStudents(db, turmaId, studentIds = [], studentClassifica
   const placeholders = uniqueStudentIds.map(() => '?').join(', ');
   await db.run(`DELETE FROM turma_alunos WHERE turma_id = ? AND aluno_id NOT IN (${placeholders})`, turmaId, ...uniqueStudentIds);
 
-  for (const assignment of assignments) {
-    await db.run(
-      `INSERT INTO turma_alunos (turma_id, aluno_id, classificacao_presenca_id)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE classificacao_presenca_id = VALUES(classificacao_presenca_id)`,
-      turmaId,
-      assignment.studentId,
-      assignment.classificationId
-    );
-  }
+  const assignmentPlaceholders = assignments.map(() => '(?, ?, ?)').join(', ');
+  const assignmentValues = assignments.flatMap((assignment) => [
+    turmaId,
+    assignment.studentId,
+    assignment.classificationId
+  ]);
+
+  await db.run(
+    `INSERT INTO turma_alunos (turma_id, aluno_id, classificacao_presenca_id)
+     VALUES ${assignmentPlaceholders}
+     ON DUPLICATE KEY UPDATE classificacao_presenca_id = VALUES(classificacao_presenca_id)`,
+    assignmentValues
+  );
 }
 
 function buildClassReportFilters(query) {
@@ -123,32 +131,32 @@ function buildClassReportFilters(query) {
   }
 
   if (query.startFrom) {
-    where.push('DATE(t.data_inicio) >= DATE(?)');
+    where.push('t.data_inicio >= ?');
     whereParams.push(query.startFrom);
   }
 
   if (query.startTo) {
-    where.push('DATE(t.data_inicio) <= DATE(?)');
+    where.push('t.data_inicio <= ?');
     whereParams.push(query.startTo);
   }
 
   if (query.endFrom) {
-    where.push('DATE(t.data_fim) >= DATE(?)');
+    where.push('t.data_fim >= ?');
     whereParams.push(query.endFrom);
   }
 
   if (query.endTo) {
-    where.push('DATE(t.data_fim) <= DATE(?)');
+    where.push('t.data_fim <= ?');
     whereParams.push(query.endTo);
   }
 
   if (query.createdFrom) {
-    where.push('DATE(t.criado_em) >= DATE(?)');
+    where.push('t.criado_em >= ?');
     whereParams.push(query.createdFrom);
   }
 
   if (query.createdTo) {
-    where.push('DATE(t.criado_em) <= DATE(?)');
+    where.push('t.criado_em < DATE_ADD(?, INTERVAL 1 DAY)');
     whereParams.push(query.createdTo);
   }
 
@@ -282,20 +290,31 @@ classRoutes.get(
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const classes = await db.all(
       `SELECT t.*, c.nome AS curso_nome, i.nome AS instrutor_nome,
-              COUNT(ta.id) AS total_alunos,
-              COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Presencial%' THEN ta.aluno_id END), 0) AS alunos_presenciais,
-              COALESCE(COUNT(DISTINCT CASE WHEN cp.nome LIKE 'Online%' THEN ta.aluno_id END), 0) AS alunos_online,
-              COALESCE(SUM(CASE WHEN ta.status LIKE 'Conclu%' THEN 1 ELSE 0 END), 0) AS alunos_concluidos,
-              COALESCE(COUNT(DISTINCT av.id), 0) AS avaliacoes_recebidas
+              COALESCE(student_stats.total_alunos, 0) AS total_alunos,
+              COALESCE(student_stats.alunos_presenciais, 0) AS alunos_presenciais,
+              COALESCE(student_stats.alunos_online, 0) AS alunos_online,
+              COALESCE(student_stats.alunos_concluidos, 0) AS alunos_concluidos,
+              COALESCE(evaluation_stats.avaliacoes_recebidas, 0) AS avaliacoes_recebidas
        FROM turmas t
        JOIN cursos c ON c.id = t.curso_id
        JOIN instrutores i ON i.id = t.instrutor_id
-       LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
-       LEFT JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
-       LEFT JOIN avaliacoes av ON av.turma_id = t.id AND av.aluno_id = ta.aluno_id
+       LEFT JOIN (
+         SELECT ta.turma_id,
+                COUNT(*) AS total_alunos,
+                SUM(CASE WHEN cp.nome LIKE 'Presencial%' THEN 1 ELSE 0 END) AS alunos_presenciais,
+                SUM(CASE WHEN cp.nome LIKE 'Online%' THEN 1 ELSE 0 END) AS alunos_online,
+                SUM(CASE WHEN ta.status LIKE 'Conclu%' THEN 1 ELSE 0 END) AS alunos_concluidos
+         FROM turma_alunos ta
+         LEFT JOIN classificacoes_presenca cp ON cp.id = ta.classificacao_presenca_id
+         GROUP BY ta.turma_id
+       ) student_stats ON student_stats.turma_id = t.id
+       LEFT JOIN (
+         SELECT turma_id, COUNT(*) AS avaliacoes_recebidas
+         FROM avaliacoes
+         GROUP BY turma_id
+       ) evaluation_stats ON evaluation_stats.turma_id = t.id
        ${where}
-       GROUP BY t.id
-       ORDER BY DATE(t.data_inicio) DESC`,
+       ORDER BY t.data_inicio DESC`,
       params
     );
 
@@ -397,7 +416,7 @@ classRoutes.get(
        ${where}
        GROUP BY t.id
        ${having}
-       ORDER BY DATE(t.data_inicio) DESC, c.nome ASC`,
+       ORDER BY t.data_inicio DESC, c.nome ASC`,
       params
     );
 
@@ -424,9 +443,11 @@ classRoutes.get(
                 COUNT(*) AS total_avaliacoes_reacao,
                 ROUND(AVG(nota_geral), 2) AS media_avaliacao_reacao
          FROM avaliacoes
+         WHERE turma_id = ?
          GROUP BY turma_id
        ) av_stats ON av_stats.turma_id = t.id
        WHERE t.id = ?`,
+      req.params.id,
       req.params.id
     );
 

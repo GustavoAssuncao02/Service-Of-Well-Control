@@ -5,6 +5,21 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api'
 });
 
+function isMutatingRequest(config) {
+  const method = String(config?.method || '').toLowerCase();
+  const url = String(config?.url || '');
+
+  if (method === 'post' && (
+    url.endsWith('/ticket') ||
+    url === '/auth/register/lookup' ||
+    url === '/public/evaluations/validate'
+  )) {
+    return false;
+  }
+
+  return ['post', 'put', 'patch', 'delete'].includes(method);
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('swc_token');
   if (token) {
@@ -15,7 +30,13 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (isMutatingRequest(response.config)) {
+      clearSessionCache();
+    }
+
+    return response;
+  },
   (error) => {
     if (error?.response?.status === 401) {
       localStorage.removeItem('swc_token');

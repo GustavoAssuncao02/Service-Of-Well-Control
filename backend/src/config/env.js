@@ -67,6 +67,7 @@ export const env = {
   dbUser: envValue('DB_USER') || 'root',
   dbPassword: envValue('DB_PASSWORD'),
   dbName: envValue('DB_NAME') || 'service_of_wellcontrol',
+  dbConnectionLimit: Math.max(5, Math.min(30, envNumber('DB_CONNECTION_LIMIT', 15))),
   adminName: envValue('ADMIN_NAME') || 'Administrador SWC',
   adminEmail: envValue('ADMIN_EMAIL') || 'admin@swc.com',
   adminPassword: envValue('ADMIN_PASSWORD') || 'admin123',
@@ -86,5 +87,8 @@ export const env = {
   googleDriveMakeFilesPublic: envBoolean('GOOGLE_DRIVE_MAKE_FILES_PUBLIC'),
   googleDriveDeleteFiles: envBoolean('GOOGLE_DRIVE_DELETE_FILES', true),
   googleDriveMaxUploadMb: envNumber('GOOGLE_DRIVE_MAX_UPLOAD_MB', 25) || 25,
-  googleDriveUploadConcurrency: Math.max(1, Math.min(8, envNumber('GOOGLE_DRIVE_UPLOAD_CONCURRENCY', 4) || 4))
+  googleDriveUploadConcurrency: Math.max(1, Math.min(8, envNumber('GOOGLE_DRIVE_UPLOAD_CONCURRENCY', 4) || 4)),
+  apiCacheEnabled: envBoolean('API_CACHE_ENABLED', true),
+  apiCacheTtlMs: Math.max(1000, envNumber('API_CACHE_TTL_SECONDS', 30) * 1000),
+  apiCacheMaxEntries: Math.max(50, Math.min(1000, envNumber('API_CACHE_MAX_ENTRIES', 300)))
 };

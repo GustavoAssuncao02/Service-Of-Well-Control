@@ -29,12 +29,12 @@ function buildWhere(query, alias = 'av') {
   }
 
   if (query.startDate) {
-    clauses.push(`DATE(${alias}.data_avaliacao) >= DATE(?)`);
+    clauses.push(`${alias}.data_avaliacao >= ?`);
     params.push(query.startDate);
   }
 
   if (query.endDate) {
-    clauses.push(`DATE(${alias}.data_avaliacao) <= DATE(?)`);
+    clauses.push(`${alias}.data_avaliacao <= ?`);
     params.push(query.endDate);
   }
 
@@ -80,22 +80,22 @@ function buildEvaluationReportWhere(query) {
   }
 
   if (query.startDate) {
-    clauses.push('DATE(av.data_avaliacao) >= DATE(?)');
+    clauses.push('av.data_avaliacao >= ?');
     params.push(query.startDate);
   }
 
   if (query.endDate) {
-    clauses.push('DATE(av.data_avaliacao) <= DATE(?)');
+    clauses.push('av.data_avaliacao <= ?');
     params.push(query.endDate);
   }
 
   if (query.classStartFrom) {
-    clauses.push('DATE(t.data_inicio) >= DATE(?)');
+    clauses.push('t.data_inicio >= ?');
     params.push(query.classStartFrom);
   }
 
   if (query.classStartTo) {
-    clauses.push('DATE(t.data_inicio) <= DATE(?)');
+    clauses.push('t.data_inicio <= ?');
     params.push(query.classStartTo);
   }
 
@@ -138,68 +138,85 @@ evaluationRoutes.get(
     const db = await getDb();
     const { where, params } = buildEvaluationReportWhere(req.query);
 
-    const overall = await db.get(
-      `SELECT ROUND(AVG(av.nota_geral), 2) AS media_geral,
-              COUNT(av.id) AS total_avaliacoes
-       FROM avaliacoes av
-       ${evaluationReportJoins}
-       ${where}`,
-      params
-    );
+    const [
+      overall,
+      byCourse,
+      byInstructor,
+      evolution,
+      distribution,
+      zoomTestRows,
+      criteria
+    ] = await Promise.all([
+      db.get(
+        `SELECT ROUND(AVG(av.nota_geral), 2) AS media_geral,
+                COUNT(av.id) AS total_avaliacoes
+         FROM avaliacoes av
+         ${evaluationReportJoins}
+         ${where}`,
+        params
+      ),
 
-    const byCourse = await db.all(
-      `SELECT c.id, c.nome, ROUND(AVG(av.nota_geral), 2) AS media, COUNT(av.id) AS total
-       FROM avaliacoes av
-       ${evaluationReportJoins}
-       ${where}
-       GROUP BY c.id, c.nome
-       ORDER BY media DESC, c.nome ASC`,
-      params
-    );
+      db.all(
+        `SELECT c.id, c.nome, ROUND(AVG(av.nota_geral), 2) AS media, COUNT(av.id) AS total
+         FROM avaliacoes av
+         ${evaluationReportJoins}
+         ${where}
+         GROUP BY c.id, c.nome
+         ORDER BY media DESC, c.nome ASC`,
+        params
+      ),
 
-    const byInstructor = await db.all(
-      `SELECT i.id, i.nome, ROUND(AVG(av.nota_geral), 2) AS media, COUNT(av.id) AS total
-       FROM avaliacoes av
-       ${evaluationReportJoins}
-       ${where}
-       GROUP BY i.id, i.nome
-       ORDER BY media DESC, i.nome ASC`,
-      params
-    );
+      db.all(
+        `SELECT i.id, i.nome, ROUND(AVG(av.nota_geral), 2) AS media, COUNT(av.id) AS total
+         FROM avaliacoes av
+         ${evaluationReportJoins}
+         ${where}
+         GROUP BY i.id, i.nome
+         ORDER BY media DESC, i.nome ASC`,
+        params
+      ),
 
-    const evolution = await db.all(
-      `SELECT DATE_FORMAT(av.data_avaliacao, '%Y-%m') AS periodo,
-              ROUND(AVG(av.nota_geral), 2) AS media,
-              COUNT(av.id) AS total
-       FROM avaliacoes av
-       ${evaluationReportJoins}
-       ${where}
-       GROUP BY periodo
-       ORDER BY periodo ASC`,
-      params
-    );
+      db.all(
+        `SELECT DATE_FORMAT(av.data_avaliacao, '%Y-%m') AS periodo,
+                ROUND(AVG(av.nota_geral), 2) AS media,
+                COUNT(av.id) AS total
+         FROM avaliacoes av
+         ${evaluationReportJoins}
+         ${where}
+         GROUP BY periodo
+         ORDER BY periodo ASC`,
+        params
+      ),
 
-    const distribution = await db.all(
-      `SELECT CAST(ROUND(av.nota_geral) AS SIGNED) AS nota,
-              COUNT(av.id) AS total
-       FROM avaliacoes av
-       ${evaluationReportJoins}
-       ${where}
-       GROUP BY nota
-       ORDER BY nota ASC`,
-      params
-    );
+      db.all(
+        `SELECT CAST(ROUND(av.nota_geral) AS SIGNED) AS nota,
+                COUNT(av.id) AS total
+         FROM avaliacoes av
+         ${evaluationReportJoins}
+         ${where}
+         GROUP BY nota
+         ORDER BY nota ASC`,
+        params
+      ),
 
-    const zoomTestRows = await db.all(
-      `SELECT av.teste_zoom AS status,
-              COUNT(av.id) AS total
-       FROM avaliacoes av
-       ${evaluationReportJoins}
-       ${where}
-       GROUP BY av.teste_zoom
-       ORDER BY FIELD(av.teste_zoom, 'Sim', 'Não')`,
-      params
-    );
+      db.all(
+        `SELECT av.teste_zoom AS status,
+                COUNT(av.id) AS total
+         FROM avaliacoes av
+         ${evaluationReportJoins}
+         ${where}
+         GROUP BY av.teste_zoom
+         ORDER BY FIELD(av.teste_zoom, 'Sim', 'Não')`,
+        params
+      ),
+      db.get(
+        `SELECT ${criteriaAverageSql}
+         FROM avaliacoes av
+         ${evaluationReportJoins}
+         ${where}`,
+        params
+      )
+    ]);
 
     const zoomTestTotal = zoomTestRows.reduce((sum, item) => sum + Number(item.total || 0), 0);
     const zoomTest = ['Sim', 'Não'].map((status) => {
@@ -213,14 +230,6 @@ evaluationRoutes.get(
         percentual: zoomTestTotal ? Number(((total * 100) / zoomTestTotal).toFixed(2)) : 0
       };
     });
-
-    const criteria = await db.get(
-      `SELECT ${criteriaAverageSql}
-       FROM avaliacoes av
-       ${evaluationReportJoins}
-       ${where}`,
-      params
-    );
 
     const responseClauses = ["rt.status LIKE 'Conclu%'"];
     const responseParams = [];
@@ -241,12 +250,12 @@ evaluationRoutes.get(
     }
 
     if (req.query.classStartFrom) {
-      responseClauses.push('DATE(rt.data_inicio) >= DATE(?)');
+      responseClauses.push('rt.data_inicio >= ?');
       responseParams.push(req.query.classStartFrom);
     }
 
     if (req.query.classStartTo) {
-      responseClauses.push('DATE(rt.data_inicio) <= DATE(?)');
+      responseClauses.push('rt.data_inicio <= ?');
       responseParams.push(req.query.classStartTo);
     }
 
@@ -278,7 +287,7 @@ evaluationRoutes.get(
        LEFT JOIN avaliacoes av ON av.turma_id = rt.id AND av.aluno_id = ta.aluno_id
        WHERE ${responseClauses.join(' AND ')}
        GROUP BY rt.id, rc.nome, rt.data_inicio, rt.data_fim
-       ORDER BY DATE(rt.data_fim) DESC`,
+       ORDER BY rt.data_fim DESC`,
       responseParams
     );
 
@@ -321,76 +330,78 @@ evaluationRoutes.get(
     const db = await getDb();
     const { where, params } = buildEvaluationReportWhere(req.query);
 
-    const summary = await db.get(
-      `SELECT COUNT(av.id) AS total_avaliacoes,
-              ROUND(AVG(av.nota_geral), 2) AS media_geral,
-              MIN(av.nota_geral) AS menor_nota,
-              MAX(av.nota_geral) AS maior_nota,
-              COUNT(DISTINCT av.curso_id) AS total_cursos,
-              COUNT(DISTINCT av.instrutor_id) AS total_instrutores,
-              COUNT(DISTINCT av.turma_id) AS total_turmas,
-              SUM(CASE WHEN av.comentario IS NOT NULL AND TRIM(av.comentario) <> '' THEN 1 ELSE 0 END) AS total_comentarios,
-              ${criteriaAverageSql}
-       FROM avaliacoes av
-       JOIN alunos a ON a.id = av.aluno_id
-       JOIN cursos c ON c.id = av.curso_id
-       JOIN instrutores i ON i.id = av.instrutor_id
-       JOIN turmas t ON t.id = av.turma_id
-       ${where}`,
-      params
-    );
+    const [summary, evaluations] = await Promise.all([
+      db.get(
+        `SELECT COUNT(av.id) AS total_avaliacoes,
+                ROUND(AVG(av.nota_geral), 2) AS media_geral,
+                MIN(av.nota_geral) AS menor_nota,
+                MAX(av.nota_geral) AS maior_nota,
+                COUNT(DISTINCT av.curso_id) AS total_cursos,
+                COUNT(DISTINCT av.instrutor_id) AS total_instrutores,
+                COUNT(DISTINCT av.turma_id) AS total_turmas,
+                SUM(CASE WHEN av.comentario IS NOT NULL AND TRIM(av.comentario) <> '' THEN 1 ELSE 0 END) AS total_comentarios,
+                ${criteriaAverageSql}
+         FROM avaliacoes av
+         JOIN alunos a ON a.id = av.aluno_id
+         JOIN cursos c ON c.id = av.curso_id
+         JOIN instrutores i ON i.id = av.instrutor_id
+         JOIN turmas t ON t.id = av.turma_id
+         ${where}`,
+        params
+      ),
 
-    const evaluations = await db.all(
-      `SELECT av.id,
-              av.aluno_id,
-              av.turma_id,
-              av.curso_id,
-              av.instrutor_id,
-              av.data_avaliacao,
-              av.nota_1,
-              av.nota_2,
-              av.nota_3,
-              av.nota_4,
-              av.nota_5,
-              av.nota_6,
-              av.nota_7,
-              av.nota_8,
-              av.nota_9,
-              av.nota_10,
-              av.nota_11,
-              av.nota_12,
-              av.nota_13,
-              av.nota_14,
-              av.nota_geral,
-              av.teste_zoom,
-              av.comentario,
-              DATE(av.criado_em) AS data_cadastro,
-              a.nome_completo AS aluno_nome,
-              a.cpf,
-              a.email AS aluno_email,
-              a.telefone AS aluno_telefone,
-              COALESCE(e.nome, a.empresa) AS empresa,
-              a.cidade,
-              a.estado,
-              c.nome AS curso_nome,
-              cc.nome AS classificacao_nome,
-              i.nome AS instrutor_nome,
-              t.data_inicio,
-              t.data_fim,
-              t.status AS turma_status,
-              t.local,
-              t.sala_online
-       FROM avaliacoes av
-       JOIN alunos a ON a.id = av.aluno_id
-       LEFT JOIN empresas e ON e.id = a.empresa_id
-       JOIN cursos c ON c.id = av.curso_id
-       JOIN classificacoes_cursos cc ON cc.id = c.classificacao_id
-       JOIN instrutores i ON i.id = av.instrutor_id
-       JOIN turmas t ON t.id = av.turma_id
-       ${where}
-       ORDER BY DATE(av.data_avaliacao) DESC, a.nome_completo ASC`,
-      params
-    );
+      db.all(
+        `SELECT av.id,
+                av.aluno_id,
+                av.turma_id,
+                av.curso_id,
+                av.instrutor_id,
+                av.data_avaliacao,
+                av.nota_1,
+                av.nota_2,
+                av.nota_3,
+                av.nota_4,
+                av.nota_5,
+                av.nota_6,
+                av.nota_7,
+                av.nota_8,
+                av.nota_9,
+                av.nota_10,
+                av.nota_11,
+                av.nota_12,
+                av.nota_13,
+                av.nota_14,
+                av.nota_geral,
+                av.teste_zoom,
+                av.comentario,
+                DATE(av.criado_em) AS data_cadastro,
+                a.nome_completo AS aluno_nome,
+                a.cpf,
+                a.email AS aluno_email,
+                a.telefone AS aluno_telefone,
+                COALESCE(e.nome, a.empresa) AS empresa,
+                a.cidade,
+                a.estado,
+                c.nome AS curso_nome,
+                cc.nome AS classificacao_nome,
+                i.nome AS instrutor_nome,
+                t.data_inicio,
+                t.data_fim,
+                t.status AS turma_status,
+                t.local,
+                t.sala_online
+         FROM avaliacoes av
+         JOIN alunos a ON a.id = av.aluno_id
+         LEFT JOIN empresas e ON e.id = a.empresa_id
+         JOIN cursos c ON c.id = av.curso_id
+         JOIN classificacoes_cursos cc ON cc.id = c.classificacao_id
+         JOIN instrutores i ON i.id = av.instrutor_id
+         JOIN turmas t ON t.id = av.turma_id
+         ${where}
+         ORDER BY av.data_avaliacao DESC, a.nome_completo ASC`,
+        params
+      )
+    ]);
 
     res.json({
       summary: {
@@ -415,34 +426,34 @@ evaluationRoutes.get(
     const db = await getDb();
     const { where, params } = buildWhere(req.query);
 
-    const overall = await db.get(
-      `SELECT ROUND(AVG(av.nota_geral), 2) AS media_geral,
-              COUNT(av.id) AS total_avaliacoes
-       FROM avaliacoes av
-       ${where}`,
-      params
-    );
-
-    const criteria = await db.get(
-      `SELECT ${criteriaAverageSql}
-       FROM avaliacoes av
-       ${where}`,
-      params
-    );
-
-    const evaluations = await db.all(
-      `SELECT av.*, a.nome_completo AS aluno_nome, a.cpf,
-              c.nome AS curso_nome, i.nome AS instrutor_nome,
-              t.data_inicio, t.data_fim, t.local, t.sala_online
-       FROM avaliacoes av
-       JOIN alunos a ON a.id = av.aluno_id
-       JOIN cursos c ON c.id = av.curso_id
-       JOIN instrutores i ON i.id = av.instrutor_id
-       JOIN turmas t ON t.id = av.turma_id
-       ${where}
-       ORDER BY DATE(av.data_avaliacao) DESC, a.nome_completo ASC`,
-      params
-    );
+    const [overall, criteria, evaluations] = await Promise.all([
+      db.get(
+        `SELECT ROUND(AVG(av.nota_geral), 2) AS media_geral,
+                COUNT(av.id) AS total_avaliacoes
+         FROM avaliacoes av
+         ${where}`,
+        params
+      ),
+      db.get(
+        `SELECT ${criteriaAverageSql}
+         FROM avaliacoes av
+         ${where}`,
+        params
+      ),
+      db.all(
+        `SELECT av.*, a.nome_completo AS aluno_nome, a.cpf,
+                c.nome AS curso_nome, i.nome AS instrutor_nome,
+                t.data_inicio, t.data_fim, t.local, t.sala_online
+         FROM avaliacoes av
+         JOIN alunos a ON a.id = av.aluno_id
+         JOIN cursos c ON c.id = av.curso_id
+         JOIN instrutores i ON i.id = av.instrutor_id
+         JOIN turmas t ON t.id = av.turma_id
+         ${where}
+         ORDER BY av.data_avaliacao DESC, a.nome_completo ASC`,
+        params
+      )
+    ]);
 
     res.json({
       overall: {
